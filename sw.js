@@ -1,4 +1,4 @@
-const CACHE = "korean-recall-v1";
+const CACHE = "korean-recall-v7";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./sw.js"];
 
 self.addEventListener("install", (e) => {
@@ -14,4 +14,5 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(
     caches.match(e.request).then((res) => res || fetch(e.request))
   );
+
 });
