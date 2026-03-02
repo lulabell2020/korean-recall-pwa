@@ -1,4 +1,4 @@
-const CACHE = "korean-recall-v8";
+const CACHE = "korean-recall-v9";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./sw.js"];
 
 self.addEventListener("install", (e) => {
@@ -16,4 +16,5 @@ self.addEventListener("fetch", (e) => {
   );
 
 });
+
 
