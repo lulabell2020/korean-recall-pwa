@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#111111"/>
 <style>
   body{margin:0;background:#0b0b0b;color:#f2f2f2;font-family:system-ui;}
-  .wrap{max-width:920px;margin:auto;padding:16px;}
+  .wrap{max-width:940px;margin:auto;padding:16px;}
   .card{background:#141414;border:1px solid #2a2a2a;border-radius:16px;padding:14px;margin:12px 0;}
   textarea,input{width:100%;background:#0f0f0f;color:#fff;border:1px solid #333;border-radius:12px;padding:10px;font-size:16px;}
   button{margin-top:8px;padding:10px 12px;border-radius:12px;border:0;font-weight:700;}
@@ -22,7 +22,8 @@
   .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#111;border:1px solid #333;font-size:12px;margin-right:6px;}
   .muted{opacity:.8;}
   label{display:block;margin:6px 0;}
-  .row{display:flex;gap:10px;flex-wrap:wrap;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+  .row > div{flex:1;min-width:220px;}
 </style>
 </head>
 <body>
@@ -31,24 +32,36 @@
 
   <div class="card">
     <div class="muted" style="margin-bottom:8px;">
-      Recommended format (tagged):
-      <pre style="white-space:pre-wrap;background:#0f0f0f;border:1px solid #333;padding:10px;border-radius:12px;margin:8px 0;">EN: Hello, nice to meet you.
-KO: 안녕하세요, 만나서 반가워요.</pre>
-      If your island is currently alternating lines (EN then KO), press <b>Format to EN/KO tags</b>.
+      Paste **tagged** pairs (one per line):
+      <pre style="white-space:pre-wrap;background:#0f0f0f;border:1px solid #333;padding:10px;border-radius:12px;margin:8px 0;">EN: I like to go for walks.
+KO: 저는 산책하는 것을 좋아해요.</pre>
     </div>
 
-    <textarea id="islandInput" placeholder="EN: I like to go for walks.
-KO: 저는 산책하는 것을 좋아해요."></textarea>
+    <div class="row">
+      <div>
+        <div class="muted" style="font-size:12px;margin-bottom:6px;">Island name (for saving/loading)</div>
+        <input id="islandName" placeholder="e.g., Prompt Style 1" />
+      </div>
+      <div style="flex:0.8;min-width:180px;">
+        <button class="secondary" id="saveBtn">Save</button>
+        <button class="secondary" id="loadBtn">Load</button>
+        <button class="secondary" id="deleteBtn">Delete</button>
+      </div>
+    </div>
+
+    <textarea id="islandInput" placeholder="EN: Hello, nice to meet you.
+KO: 안녕하세요, 만나서 반가워요."></textarea>
 
     <div class="row">
-      <div style="flex:1;min-width:240px;">
-        <button class="secondary" id="formatBtn">Format to EN/KO tags</button>
-      </div>
-      <div style="flex:2;min-width:280px;">
+      <div>
         <label><input type="checkbox" id="autoShuffle" checked> Auto Shuffle</label>
         <label><input type="checkbox" id="lenient" checked> Lenient matching (recommended)</label>
+      </div>
+      <div>
         <label><input type="checkbox" id="speakEnglish" checked> Speak EN prompt</label>
-        <label><input type="checkbox" id="speakKoreanPrompt"> Speak KO prompt (before you answer)</label>
+        <label><input type="checkbox" id="speakKoreanPrompt" checked> Speak KO prompt (before you answer)</label>
+      </div>
+      <div>
         <label><input type="checkbox" id="autoMic" checked> Auto-open mic after prompts</label>
       </div>
     </div>
@@ -78,7 +91,9 @@ KO: 저는 산책하는 것을 좋아해요."></textarea>
 </div>
 
 <script>
-// ----------------- Core helpers -----------------
+// =========================
+// Helpers
+// =========================
 function shuffle(arr){
   const a=arr.slice();
   for(let i=a.length-1;i>0;i--){
@@ -87,17 +102,15 @@ function shuffle(arr){
   }
   return a;
 }
-function hasHangul(s){ return /[가-힣]/.test(s||""); }
 
-// Keep only Korean from transcripts/targets
 function koreanOnly(s){
   return (s||"")
     .replace(/[^가-힣\s]/g,"")
     .replace(/\s+/g," ")
     .trim();
 }
+
 function normalizeLenient(s){
-  // compare without spaces/punct
   return (s||"")
     .trim()
     .replace(/[“”]/g,'"').replace(/[‘’]/g,"'")
@@ -114,6 +127,7 @@ function isCorrect(user, target){
   const t=len?normalizeLenient(target):normalizeStrict(target);
   return u===t;
 }
+
 function escapeHtml(s){
   return (s||"")
     .replaceAll("&","&amp;").replaceAll("<","&lt;")
@@ -121,7 +135,9 @@ function escapeHtml(s){
     .replaceAll("'","&#039;");
 }
 
-// ----------------- Voice selection (hard force) -----------------
+// =========================
+// Voice selection
+// =========================
 let VOICES=[], EN_VOICE=null, KO_VOICE=null;
 
 function pickVoices(){
@@ -143,7 +159,6 @@ function waitForVoices(){
   return new Promise(resolve=>{
     pickVoices();
     if ((speechSynthesis.getVoices()||[]).length) return resolve();
-    // some browsers populate async
     let tries=0;
     const t=setInterval(()=>{
       pickVoices();
@@ -161,7 +176,6 @@ function speak(text, lang, voiceObj){
     try{
       speechSynthesis.cancel();
       const u=new SpeechSynthesisUtterance(text);
-      // Force both lang + voice
       if (voiceObj){ u.voice = voiceObj; u.lang = voiceObj.lang; }
       else { u.lang = lang; }
       u.rate=1.0;
@@ -172,11 +186,13 @@ function speak(text, lang, voiceObj){
   });
 }
 
-// Echo guard (mic hearing TTS)
+// Echo guard
 let lastSpoken="", lastSpokenAt=0;
 function markSpoken(text){ lastSpoken=(text||"").trim(); lastSpokenAt=Date.now(); }
 
-// ----------------- Parsing: STRICT tagged format -----------------
+// =========================
+// Parsing (STRICT EN:/KO: pairs)
+// =========================
 function parseTaggedIsland(text){
   const lines=(text||"").split("\n").map(l=>l.trim()).filter(l=>l.length>0);
 
@@ -184,60 +200,75 @@ function parseTaggedIsland(text){
   let currentEN=null;
 
   for(const line of lines){
-    if (line.toUpperCase().startsWith("EN:")){
+    const up=line.toUpperCase();
+    if (up.startsWith("EN:")){
       currentEN = line.slice(3).trim();
       continue;
     }
-    if (line.toUpperCase().startsWith("KO:") || line.toUpperCase().startsWith("KR:")){
+    if (up.startsWith("KO:") || up.startsWith("KR:")){
       const ko = line.slice(3).trim();
       if (!currentEN) throw new Error("Found KO: without a preceding EN: line.");
       pairs.push({ en: currentEN, kr: ko });
       currentEN=null;
       continue;
     }
-    // Ignore untagged lines to prevent ambiguity
+    // ignore untagged lines
   }
 
-  if (currentEN) {
-    throw new Error("Last EN: line has no matching KO: line.");
-  }
-  if (!pairs.length) {
-    throw new Error("No EN:/KO: pairs found. Press 'Format to EN/KO tags' or paste in tagged format.");
-  }
+  if (currentEN) throw new Error("Last EN: line has no matching KO: line.");
+  if (!pairs.length) throw new Error("No EN:/KO: pairs found. Make sure your island uses EN: and KO: tags.");
 
   return pairs.map((p,i)=>({ ...p, id:String(i) }));
 }
 
-// Convert alternating lines into tagged format
-function formatAlternatingToTagged(text){
-  const lines=(text||"").split("\n").map(l=>l.trim()).filter(l=>l.length>0);
-  if (lines.length<2) return text;
+// =========================
+// Save / Load (localStorage)
+// =========================
+function storageKey(name){ return "kr_island_" + name.toLowerCase().trim(); }
+const LAST_KEY = "kr_island_last_name";
 
-  // If already tagged, do nothing
-  if (lines.some(l => l.toUpperCase().startsWith("EN:")) && lines.some(l => l.toUpperCase().startsWith("KO:"))) {
-    return text;
-  }
-
-  if (lines.length % 2 !== 0) {
-    throw new Error("Odd number of lines — alternating format must be even (EN line then KO line).");
-  }
-
-  const out=[];
-  for(let i=0;i<lines.length;i+=2){
-    out.push("EN: " + lines[i]);
-    out.push("KO: " + lines[i+1]);
-  }
-  return out.join("\n");
+function saveIsland(){
+  const name = (document.getElementById("islandName").value || "").trim();
+  if (!name) { alert("Please enter an island name to save."); return; }
+  const text = document.getElementById("islandInput").value || "";
+  localStorage.setItem(storageKey(name), text);
+  localStorage.setItem(LAST_KEY, name);
+  alert(`Saved: ${name}`);
 }
 
-// ----------------- Session state -----------------
+function loadIsland(){
+  let name = (document.getElementById("islandName").value || "").trim();
+  if (!name) name = (localStorage.getItem(LAST_KEY) || "").trim();
+  if (!name) { alert("Enter an island name to load."); return; }
+
+  const text = localStorage.getItem(storageKey(name));
+  if (!text) { alert(`No saved island found for: ${name}`); return; }
+
+  document.getElementById("islandName").value = name;
+  document.getElementById("islandInput").value = text;
+  localStorage.setItem(LAST_KEY, name);
+  alert(`Loaded: ${name}`);
+}
+
+function deleteIsland(){
+  const name = (document.getElementById("islandName").value || "").trim();
+  if (!name) { alert("Enter an island name to delete."); return; }
+  localStorage.removeItem(storageKey(name));
+  alert(`Deleted: ${name}`);
+}
+
+// =========================
+// Session State
+// =========================
 let items=[], firstQueue=[], wrongSet=new Set(), retestQueue=[];
 let phase="idle", current=null, firstIndex=0, retestIndex=0;
 
 let rec=null, speechUnlocked=false;
+let micActive=false;
+let busy=false;          // prevents double-submit / overlapping async
+let pendingMicTimer=null;
 
 const els={
-  islandInput:document.getElementById("islandInput"),
   promptEN:document.getElementById("promptEN"),
   micState:document.getElementById("micState"),
   answerInput:document.getElementById("answerInput"),
@@ -262,21 +293,33 @@ function updatePills(){
   els.wrongPill.textContent = "Wrongs: " + wrongSet.size;
 }
 
-// ----------------- Speech recognition (Korean answers only) -----------------
+function clearPendingMic(){
+  if (pendingMicTimer) { clearTimeout(pendingMicTimer); pendingMicTimer=null; }
+}
+
 function stopRec(){
+  clearPendingMic();
+  micActive=false;
   try{ rec && rec.stop(); }catch{}
   rec=null;
   els.micState.textContent="";
   els.stopBtn.style.display="none";
 }
 
+function startRecDelayed(ms){
+  clearPendingMic();
+  pendingMicTimer = setTimeout(()=>startRec(), ms);
+}
+
 function startRec(){
-  if(!speechUnlocked) return;
-  if(!document.getElementById("autoMic").checked) return;
+  if (!speechUnlocked) return;
+  if (!document.getElementById("autoMic").checked) return;
+  if (busy) return;
 
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR) return;
 
+  // Prevent overlapping mic sessions
   stopRec();
 
   rec=new SR();
@@ -284,40 +327,55 @@ function startRec(){
   rec.interimResults=false;
   rec.maxAlternatives=1;
 
+  micActive=true;
   els.micState.textContent="Listening…";
   els.stopBtn.style.display="inline-block";
 
   rec.onresult=(e)=>{
+    if (busy) return;
     const raw=(e.results?.[0]?.[0]?.transcript||"").trim();
 
-    // ignore echo of what we just spoke
-    const tooSoon=(Date.now()-lastSpokenAt)<2000;
+    // echo guard
+    const tooSoon=(Date.now()-lastSpokenAt)<2200;
     if(tooSoon && normalizeLenient(raw)===normalizeLenient(lastSpoken)){
-      setTimeout(startRec, 200);
+      // restart listening
+      startRecDelayed(200);
       return;
     }
 
     const kr = koreanOnly(raw);
-
-    // if no Korean detected, keep listening (likely echo / noise)
     if(!kr){
-      setTimeout(startRec, 200);
+      startRecDelayed(200);
       return;
     }
 
     els.answerInput.value = kr;
-    handleSubmit();
+    handleSubmit(); // auto-submit
   };
 
-  rec.onerror=()=>{ stopRec(); };
+  rec.onerror=()=>{
+    micActive=false;
+    stopRec();
+    // try again if in-session
+    if((phase==="first"||phase==="retest") && !busy){
+      startRecDelayed(300);
+    }
+  };
+
   rec.onend=()=>{
-    if(phase==="first"||phase==="retest") setTimeout(startRec, 250);
+    micActive=false;
+    // If we are mid-session and not busy, keep the mic alive
+    if((phase==="first"||phase==="retest") && !busy){
+      startRecDelayed(300);
+    }
   };
 
   try{ rec.start(); }catch{ stopRec(); }
 }
 
-// ----------------- Flow -----------------
+// =========================
+// Flow
+// =========================
 async function presentPrompt(){
   els.promptEN.textContent=current.en;
   els.details.innerHTML="";
@@ -326,21 +384,23 @@ async function presentPrompt(){
   updatePills();
 
   stopRec();
+  busy=true;
 
-  // Speak EN (forced EN voice)
+  // Speak EN then KO (your preference)
   if(document.getElementById("speakEnglish").checked){
     markSpoken(current.en);
     await speak(current.en, "en-US", EN_VOICE);
   }
 
-  // Optionally speak KO prompt BEFORE answering (your new preference toggles this)
   if(document.getElementById("speakKoreanPrompt").checked){
     markSpoken(current.kr);
     await speak(current.kr, "ko-KR", KO_VOICE);
   }
 
-  // Delay to avoid mic catching tail of TTS
-  setTimeout(startRec, 500);
+  busy=false;
+
+  // Delay to avoid mic catching TTS tail
+  startRecDelayed(550);
 }
 
 function pickNext(){
@@ -350,7 +410,9 @@ function pickNext(){
         phase="retest";
         retestQueue=document.getElementById("autoShuffle").checked ? shuffle([...wrongSet]) : [...wrongSet];
         retestIndex=0;
-      } else phase="complete";
+      } else {
+        phase="complete";
+      }
     }
   } else if(phase==="retest"){
     if(retestIndex>=retestQueue.length) phase="complete";
@@ -367,6 +429,7 @@ async function advance(){
   current = pickNext();
 
   if(!current){
+    phase="complete";
     els.promptEN.textContent="Session complete.";
     els.details.innerHTML="";
     setStatus("", null);
@@ -378,55 +441,65 @@ async function advance(){
   await presentPrompt();
 }
 
-// ----------------- Grading (Korean ONLY) -----------------
+// =========================
+// Submit logic (fixes “incorrect glitch”)
+// =========================
 async function handleSubmit(){
+  if (busy) return;
   if(phase!=="first" && phase!=="retest") return;
   if(!current) return;
 
+  busy=true;
   stopRec();
 
   const attempt = koreanOnly((els.answerInput.value||"").trim());
-  // Strip to Korean-only target too (prevents “must say English+Korean”)
   const target  = koreanOnly((current.kr||"").trim());
 
   if(isCorrect(attempt, target)){
     setStatus("✓", true);
-    if(wrongSet.has(current.id)) wrongSet.delete(current.id);
+    wrongSet.delete(current.id);
+    busy=false;
     await advance();
     return;
   }
 
+  // Incorrect: show correction, speak correct KO once, force repeat (do not advance)
   wrongSet.add(current.id);
   setStatus("INCORRECT", false);
   els.details.innerHTML = `
     <div class="muted"><b>Your attempt (KR only):</b> ${escapeHtml(attempt)}</div>
     <div style="margin-top:6px;"><b>Correct Korean:</b> <span style="font-size:20px;">${escapeHtml(current.kr)}</span></div>
-    <div style="margin-top:10px;" class="muted"><b>Say the correct sentence now.</b></div>
+    <div style="margin-top:10px;" class="muted"><b>Repeat the correct Korean now.</b></div>
   `;
 
-  // Speak correct Korean once, then require repetition
   markSpoken(current.kr);
   await speak(current.kr, "ko-KR", KO_VOICE);
 
+  // Clear input so repetition is fresh
   els.answerInput.value="";
-  setTimeout(startRec, 500);
+  busy=false;
+
+  // Re-open mic for repetition
+  startRecDelayed(550);
 }
 
-// ----------------- Buttons -----------------
-document.getElementById("formatBtn").addEventListener("click", ()=>{
-  try{
-    els.islandInput.value = formatAlternatingToTagged(els.islandInput.value);
-  } catch(e){
-    alert(e.message || String(e));
-  }
-});
+// =========================
+// Wire up UI
+// =========================
+document.getElementById("saveBtn").addEventListener("click", saveIsland);
+document.getElementById("loadBtn").addEventListener("click", loadIsland);
+document.getElementById("deleteBtn").addEventListener("click", deleteIsland);
 
 document.getElementById("startBtn").addEventListener("click", async ()=>{
   speechUnlocked = true;
   await waitForVoices();
 
-  // STRICT parse: EN:/KO: only
-  items = parseTaggedIsland(els.islandInput.value);
+  // Auto-load last island name (nice UX)
+  const name = (document.getElementById("islandName").value || "").trim();
+  if (name) localStorage.setItem(LAST_KEY, name);
+
+  const text = document.getElementById("islandInput").value || "";
+  items = parseTaggedIsland(text);
 
   const ids = items.map(x=>x.id);
   firstQueue = document.getElementById("autoShuffle").checked ? shuffle(ids) : ids.slice();
@@ -446,6 +519,7 @@ document.getElementById("startBtn").addEventListener("click", async ()=>{
 els.stopBtn.addEventListener("click", ()=>stopRec());
 
 els.endBtn.addEventListener("click", ()=>{
+  busy=false;
   stopRec();
   phase="idle";
   current=null;
@@ -458,8 +532,12 @@ els.endBtn.addEventListener("click", ()=>{
   els.endBtn.style.display="none";
 });
 
-// init voices display
+// Initialize voices display
 waitForVoices();
+
+// Optional: prefill last island name
+const last = localStorage.getItem(LAST_KEY);
+if (last) document.getElementById("islandName").value = last;
 </script>
 </body>
 </html>
