@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Korean Recall Voice PWA</title>
+<title>Korean Voice Recall Trainer</title>
 <link rel="manifest" href="manifest.json"/>
 <meta name="theme-color" content="#111111"/>
 
@@ -11,15 +11,17 @@
 body { margin:0; background:#0b0b0b; color:#f2f2f2; font-family:system-ui; }
 .wrap { max-width:900px; margin:auto; padding:16px; }
 .card { background:#141414; border:1px solid #2a2a2a; border-radius:16px; padding:14px; margin:12px 0; }
-textarea, input { width:100%; background:#0f0f0f; color:#fff; border:1px solid #333; border-radius:12px; padding:10px; }
-button { margin-top:8px; padding:10px; border-radius:12px; border:0; font-weight:bold; }
+textarea, input { width:100%; background:#0f0f0f; color:#fff; border:1px solid #333; border-radius:12px; padding:10px; font-size:16px; }
+button { margin-top:8px; padding:10px 12px; border-radius:12px; border:0; font-weight:700; }
 .primary { background:#f2f2f2; color:#000; }
 .secondary { background:#222; color:#fff; border:1px solid #333; }
-.big { font-size:22px; }
-.status { font-weight:800; margin-top:10px; }
+.big { font-size:22px; line-height:1.4; }
+.status { font-weight:900; margin-top:10px; }
 .ok { color:#9bff9b; }
 .bad { color:#ff8f8f; }
 .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#111; border:1px solid #333; font-size:12px; margin-right:6px;}
+.muted { opacity:.8; }
+label { display:block; margin:6px 0; }
 </style>
 </head>
 
@@ -33,20 +35,22 @@ Korean line
 English line
 Korean line"></textarea>
 
-<label><input type="checkbox" id="autoShuffle" checked> Auto Shuffle</label><br>
-<label><input type="checkbox" id="lenient" checked> Lenient Matching (Voice Recommended)</label><br>
-<label><input type="checkbox" id="speakEnglish" checked> Speak English Automatically</label><br>
-<label><input type="checkbox" id="autoMic" checked> Auto Open Mic</label><br>
+<label><input type="checkbox" id="autoShuffle" checked> Auto Shuffle</label>
+<label><input type="checkbox" id="lenient" checked> Lenient Matching</label>
+<label><input type="checkbox" id="speakEnglish" checked> Speak English Automatically</label>
+<label><input type="checkbox" id="autoMic" checked> Auto Open Mic</label>
 
 <button class="primary" id="startBtn">Start Session</button>
 </div>
 
 <div class="card" id="session" style="display:none;">
 <div class="big" id="promptEN"></div>
+<div class="muted" id="micState"></div>
 <input id="answerInput" placeholder="Voice fills automatically"/>
 <div class="status" id="statusLine"></div>
 <div id="details"></div>
-<div style="margin-top:8px;">
+
+<div style="margin-top:10px;">
 <span class="pill" id="phasePill"></span>
 <span class="pill" id="countPill"></span>
 <span class="pill" id="wrongPill"></span>
@@ -68,44 +72,37 @@ function shuffle(arr){
   return a;
 }
 
-function normalizeLenient(s){
-  let x=(s||"").trim()
+function hasHangul(s){ return /[가-힣]/.test(s || ""); }
+
+function koreanOnly(s){
+  return (s || "")
+    .replace(/[^가-힣\s]/g,"")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function normalize(s){
+  return (s||"")
     .replace(/[.,!?~…]/g,"")
-    .replace(/\s+/g,"");
-  return x;
+    .replace(/\s+/g,"")
+    .trim();
 }
 
 function isCorrect(user,target){
-  if(document.getElementById("lenient").checked){
-    return normalizeLenient(user)===normalizeLenient(target);
-  }
-  return user.trim()===target.trim();
+  return normalize(user) === normalize(target);
 }
 
 function speak(text,lang){
   return new Promise(resolve=>{
+    speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(text);
     u.lang=lang;
     u.rate=1;
     u.onend=resolve;
-    speechSynthesis.cancel();
+    u.onerror=resolve;
     speechSynthesis.speak(u);
   });
 }
-
-// -------------------- State --------------------
-
-let items=[];
-let firstQueue=[];
-let wrongSet=new Set();
-let retestQueue=[];
-let phase="idle";
-let current=null;
-let firstIndex=0;
-let retestIndex=0;
-
-let rec=null;
-let speechUnlocked=false;
 
 // -------------------- Parsing --------------------
 
@@ -119,21 +116,46 @@ function parseIsland(text){
   return arr;
 }
 
+// -------------------- State --------------------
+
+let items=[];
+let firstQueue=[];
+let wrongSet=new Set();
+let retestQueue=[];
+let phase="idle";
+let current=null;
+let firstIndex=0;
+let retestIndex=0;
+let rec=null;
+let speechUnlocked=false;
+
 // -------------------- Recognition --------------------
 
 function startRec(){
   if(!speechUnlocked) return;
   if(!document.getElementById("autoMic").checked) return;
+
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR) return;
+
   rec=new SR();
   rec.lang="ko-KR";
   rec.interimResults=false;
   rec.maxAlternatives=1;
 
+  document.getElementById("micState").textContent="Listening…";
+
   rec.onresult=(e)=>{
-    const t=e.results[0][0].transcript.trim();
-    document.getElementById("answerInput").value=t;
+    const raw=e.results[0][0].transcript.trim();
+    const kr=koreanOnly(raw);
+
+    // ignore if no Korean detected (likely echo of English)
+    if(!kr){
+      setTimeout(()=>startRec(),200);
+      return;
+    }
+
+    document.getElementById("answerInput").value=kr;
     handleSubmit();
   };
 
@@ -142,6 +164,7 @@ function startRec(){
 
 function stopRec(){
   if(rec) rec.stop();
+  document.getElementById("micState").textContent="";
 }
 
 // -------------------- Flow --------------------
@@ -156,7 +179,7 @@ async function present(){
     await speak(current.en,"en-US");
   }
 
-  startRec();
+  setTimeout(()=>startRec(),300);
 }
 
 async function advance(){
@@ -203,10 +226,11 @@ function updatePills(){
 
 async function handleSubmit(){
   stopRec();
-  const attempt=document.getElementById("answerInput").value.trim();
-  const correct=isCorrect(attempt,current.kr);
 
-  if(correct){
+  const attempt=koreanOnly(document.getElementById("answerInput").value);
+  const target=koreanOnly(current.kr);
+
+  if(isCorrect(attempt,target)){
     document.getElementById("statusLine").textContent="✓";
     document.getElementById("statusLine").className="status ok";
     wrongSet.delete(current.id);
@@ -223,9 +247,8 @@ async function handleSubmit(){
     "<br>Repeat it now.";
 
   await speak(current.kr,"ko-KR");
-
   document.getElementById("answerInput").value="";
-  startRec();
+  setTimeout(()=>startRec(),300);
 }
 
 // -------------------- Start --------------------
