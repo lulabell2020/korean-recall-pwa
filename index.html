@@ -1,555 +1,248 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Korean Recall PWA</title>
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#111111" />
-  <style>
-    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-    body { margin: 0; background:#0b0b0b; color:#f2f2f2; }
-    .wrap { max-width: 900px; margin: 0 auto; padding: 16px; }
-    .card { background:#141414; border:1px solid #2a2a2a; border-radius: 16px; padding: 14px; margin: 12px 0; }
-    textarea { width:100%; min-height: 180px; background:#0f0f0f; color:#f2f2f2; border:1px solid #2a2a2a; border-radius: 12px; padding: 10px; }
-    input[type="text"] { width:100%; background:#0f0f0f; color:#f2f2f2; border:1px solid #2a2a2a; border-radius: 12px; padding: 10px; font-size: 16px; }
-    button {
-      background:#f2f2f2; color:#0b0b0b; border:0; border-radius: 12px;
-      padding: 10px 12px; font-weight: 700; margin-right: 8px; margin-top: 8px;
-    }
-    button.secondary { background:#222; color:#f2f2f2; border:1px solid #333; }
-    button.danger { background:#ff5c5c; color:#0b0b0b; }
-    .row { display:flex; gap:10px; flex-wrap: wrap; }
-    .row > * { flex: 1; min-width: 180px; }
-    .label { font-size: 12px; opacity: .85; margin-bottom: 6px; }
-    .big { font-size: 20px; line-height: 1.3; }
-    .korean { font-size: 22px; }
-    .muted { opacity: .8; }
-    .status { font-weight: 800; }
-    .ok { color: #9bff9b; }
-    .bad { color: #ff8f8f; }
-    .pill { display:inline-block; padding: 4px 10px; border-radius: 999px; border: 1px solid #333; background:#111; font-size: 12px; }
-    .footer { opacity:.7; font-size: 12px; margin-top: 14px; }
-    .toggle { display:flex; align-items:center; gap:8px; margin-top: 8px; }
-    .toggle input { transform: scale(1.2); }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Korean Recall Voice PWA</title>
+<link rel="manifest" href="manifest.json"/>
+<meta name="theme-color" content="#111111"/>
+
+<style>
+body { margin:0; background:#0b0b0b; color:#f2f2f2; font-family:system-ui; }
+.wrap { max-width:900px; margin:auto; padding:16px; }
+.card { background:#141414; border:1px solid #2a2a2a; border-radius:16px; padding:14px; margin:12px 0; }
+textarea, input { width:100%; background:#0f0f0f; color:#fff; border:1px solid #333; border-radius:12px; padding:10px; }
+button { margin-top:8px; padding:10px; border-radius:12px; border:0; font-weight:bold; }
+.primary { background:#f2f2f2; color:#000; }
+.secondary { background:#222; color:#fff; border:1px solid #333; }
+.big { font-size:22px; }
+.status { font-weight:800; margin-top:10px; }
+.ok { color:#9bff9b; }
+.bad { color:#ff8f8f; }
+.pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#111; border:1px solid #333; font-size:12px; margin-right:6px;}
+</style>
 </head>
+
 <body>
-  <div class="wrap">
-    <h2 style="margin: 6px 0 12px 0;">Korean Sentence Recall (Voice PWA)</h2>
+<div class="wrap">
+<h2>Korean Voice Recall Trainer</h2>
 
-    <div class="card">
-      <div class="label">Paste your Language Island (format: English line, then Korean line, repeating)</div>
-      <textarea id="islandInput" placeholder="Hello, nice to meet you.
-안녕하세요, 만나서 반가워요."></textarea>
+<div class="card">
+<textarea id="islandInput" placeholder="English line
+Korean line
+English line
+Korean line"></textarea>
 
-      <div class="row">
-        <div>
-          <div class="label">Island name (optional, used for saving)</div>
-          <input id="islandName" type="text" placeholder="e.g., Prompt Style" />
-        </div>
-        <div>
-          <div class="label">Settings</div>
-          <div class="toggle">
-            <input id="autoShuffle" type="checkbox" checked />
-            <label for="autoShuffle">Auto Shuffle</label>
-          </div>
-          <div class="toggle">
-            <input id="lenient" type="checkbox" checked />
-            <label for="lenient">Lenient matching (recommended for voice)</label>
-          </div>
-          <div class="toggle">
-            <input id="speakEnglish" type="checkbox" checked />
-            <label for="speakEnglish">Speak English prompts automatically</label>
-          </div>
-          <div class="toggle">
-            <input id="autoMic" type="checkbox" checked />
-            <label for="autoMic">Auto-open mic after prompt</label>
-          </div>
-        </div>
-      </div>
+<label><input type="checkbox" id="autoShuffle" checked> Auto Shuffle</label><br>
+<label><input type="checkbox" id="lenient" checked> Lenient Matching (Voice Recommended)</label><br>
+<label><input type="checkbox" id="speakEnglish" checked> Speak English Automatically</label><br>
+<label><input type="checkbox" id="autoMic" checked> Auto Open Mic</label><br>
 
-      <button id="startBtn">Start session</button>
-      <button id="loadBtn" class="secondary">Load saved island</button>
-      <button id="clearBtn" class="danger">Clear saved</button>
+<button class="primary" id="startBtn">Start Session</button>
+</div>
 
-      <div class="footer">
-        For best voice support use <b>Chrome</b> on Android. After you hit Start once, it should continue hands-free.
-      </div>
-    </div>
+<div class="card" id="session" style="display:none;">
+<div class="big" id="promptEN"></div>
+<input id="answerInput" placeholder="Voice fills automatically"/>
+<div class="status" id="statusLine"></div>
+<div id="details"></div>
+<div style="margin-top:8px;">
+<span class="pill" id="phasePill"></span>
+<span class="pill" id="countPill"></span>
+<span class="pill" id="wrongPill"></span>
+</div>
+</div>
 
-    <div id="session" class="card" style="display:none;">
-      <div class="row">
-        <div>
-          <div class="label">Prompt (EN)</div>
-          <div id="promptEN" class="big"></div>
-        </div>
-        <div>
-          <div class="label">Target (KR)</div>
-          <div id="targetKR" class="big korean muted"></div>
-        </div>
-      </div>
-
-      <div class="row" style="margin-top: 8px;">
-        <div>
-          <div class="label">Your answer (KR) — voice or typing</div>
-          <input id="answerInput" type="text" placeholder="(Voice will fill this automatically)" />
-          <div>
-            <button id="micBtn" class="secondary">🎤 Speak Answer</button>
-            <button id="stopMicBtn" class="secondary" style="display:none;">■ Stop</button>
-            <button id="submitBtn">Submit</button>
-            <button id="repeatKRBtn" class="secondary">🔊 Speak correct KR</button>
-          </div>
-        </div>
-        <div>
-          <div class="label">Status</div>
-          <div id="statusLine" class="status"></div>
-          <div id="details" style="margin-top: 8px;"></div>
-          <div style="margin-top: 10px;">
-            <span class="pill" id="phasePill">Phase: —</span>
-            <span class="pill" id="countPill" style="margin-left:6px;">0/0</span>
-            <span class="pill" id="wrongPill" style="margin-left:6px;">Wrongs: 0</span>
-          </div>
-        </div>
-      </div>
-
-      <div style="margin-top: 12px;">
-        <button id="endBtn" class="danger">End session</button>
-      </div>
-    </div>
-  </div>
+</div>
 
 <script>
-/** -----------------------
- * Utilities
- * ---------------------*/
-function shuffle(arr) {
+
+// -------------------- Utilities --------------------
+
+function shuffle(arr){
   const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
   }
   return a;
 }
 
-function normalizeStrict(s) { return (s || "").trim(); }
-function normalizeLenient(s) {
-  return (s || "")
-    .trim()
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/\s+/g, " ")
-    .replace(/[.,!?~…]/g, "")
-    .replace(/[()]/g, "")
-    .replace(/\u200b/g, "");
+function normalizeLenient(s){
+  let x=(s||"").trim()
+    .replace(/[.,!?~…]/g,"")
+    .replace(/\s+/g,"");
+  return x;
 }
 
-function speak(text, lang="ko-KR") {
-  return new Promise((resolve) => {
-    try {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = lang;
-      u.rate = 1.0;
-      u.onend = resolve;
-      u.onerror = resolve;
-      window.speechSynthesis.speak(u);
-    } catch {
-      resolve();
-    }
+function isCorrect(user,target){
+  if(document.getElementById("lenient").checked){
+    return normalizeLenient(user)===normalizeLenient(target);
+  }
+  return user.trim()===target.trim();
+}
+
+function speak(text,lang){
+  return new Promise(resolve=>{
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang=lang;
+    u.rate=1;
+    u.onend=resolve;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
   });
 }
 
-function canRecognize() {
-  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-}
+// -------------------- State --------------------
 
-/** -----------------------
- * Elements
- * ---------------------*/
-const els = {
-  islandInput: document.getElementById("islandInput"),
-  islandName: document.getElementById("islandName"),
-  autoShuffle: document.getElementById("autoShuffle"),
-  lenient: document.getElementById("lenient"),
-  speakEnglish: document.getElementById("speakEnglish"),
-  autoMic: document.getElementById("autoMic"),
+let items=[];
+let firstQueue=[];
+let wrongSet=new Set();
+let retestQueue=[];
+let phase="idle";
+let current=null;
+let firstIndex=0;
+let retestIndex=0;
 
-  startBtn: document.getElementById("startBtn"),
-  loadBtn: document.getElementById("loadBtn"),
-  clearBtn: document.getElementById("clearBtn"),
+let rec=null;
+let speechUnlocked=false;
 
-  session: document.getElementById("session"),
-  promptEN: document.getElementById("promptEN"),
-  targetKR: document.getElementById("targetKR"),
-  answerInput: document.getElementById("answerInput"),
-  submitBtn: document.getElementById("submitBtn"),
-  repeatKRBtn: document.getElementById("repeatKRBtn"),
-  statusLine: document.getElementById("statusLine"),
-  details: document.getElementById("details"),
-  phasePill: document.getElementById("phasePill"),
-  countPill: document.getElementById("countPill"),
-  wrongPill: document.getElementById("wrongPill"),
-  endBtn: document.getElementById("endBtn"),
-  micBtn: document.getElementById("micBtn"),
-  stopMicBtn: document.getElementById("stopMicBtn")
-};
+// -------------------- Parsing --------------------
 
-/** -----------------------
- * Save/Load
- * ---------------------*/
-function saveIsland() {
-  const name = (els.islandName.value || "default").trim();
-  const key = "korean_recall_island_" + name.toLowerCase();
-  localStorage.setItem(key, els.islandInput.value);
-  localStorage.setItem("korean_recall_last_island_name", name);
-}
-
-function loadIsland() {
-  const last = localStorage.getItem("korean_recall_last_island_name") || "default";
-  const name = (els.islandName.value || last).trim() || "default";
-  const key = "korean_recall_island_" + name.toLowerCase();
-  const val = localStorage.getItem(key);
-  if (val) {
-    els.islandInput.value = val;
-    els.islandName.value = name;
-  } else {
-    alert("No saved island found for: " + name);
+function parseIsland(text){
+  const lines=text.split("\n").map(l=>l.trim()).filter(l=>l);
+  if(lines.length%2!==0) throw new Error("Odd number of lines.");
+  const arr=[];
+  for(let i=0;i<lines.length;i+=2){
+    arr.push({en:lines[i],kr:lines[i+1],id:String(i/2)});
   }
+  return arr;
 }
 
-function clearSaved() {
-  const name = (els.islandName.value || "default").trim();
-  const key = "korean_recall_island_" + name.toLowerCase();
-  localStorage.removeItem(key);
-  alert("Cleared saved island: " + name);
-}
+// -------------------- Recognition --------------------
 
-/** -----------------------
- * Parse
- * ---------------------*/
-function parseIsland(text) {
-  const lines = (text || "")
-    .split("\n")
-    .map(l => l.trim())
-    .filter(l => l.length > 0);
+function startRec(){
+  if(!speechUnlocked) return;
+  if(!document.getElementById("autoMic").checked) return;
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR) return;
+  rec=new SR();
+  rec.lang="ko-KR";
+  rec.interimResults=false;
+  rec.maxAlternatives=1;
 
-  if (lines.length % 2 !== 0) {
-    throw new Error("Odd number of lines. It must be English line then Korean line, repeating.");
-  }
-
-  const parsed = [];
-  for (let i = 0; i < lines.length; i += 2) {
-    parsed.push({ en: lines[i], kr: lines[i+1], id: String(i/2) });
-  }
-  return parsed;
-}
-
-/** -----------------------
- * Session State
- * ---------------------*/
-let items = [];
-let firstPassQueue = [];
-let wrongSet = new Set();
-let retestQueue = [];
-let phase = "idle"; // first | retest | complete | idle
-let current = null;
-let firstPassIndex = 0;
-let retestIndex = 0;
-let lastRetestId = null;
-
-// Mic + TTS coordination
-let rec = null;
-let isListening = false;
-let speechUnlocked = false; // set true after Start session click
-
-function updatePills() {
-  els.phasePill.textContent = "Phase: " + (phase === "first" ? "First pass" : phase === "retest" ? "Retest" : phase === "complete" ? "Complete" : "—");
-  const total = items.length;
-  const done = phase === "first" ? firstPassIndex : phase === "retest" ? Math.min(total, firstPassQueue.length + retestIndex) : phase === "complete" ? total : 0;
-  els.countPill.textContent = `${done}/${total}`;
-  els.wrongPill.textContent = "Wrongs: " + wrongSet.size;
-}
-
-function setStatus(text, ok=null) {
-  els.statusLine.textContent = text;
-  els.statusLine.classList.remove("ok","bad");
-  if (ok === true) els.statusLine.classList.add("ok");
-  if (ok === false) els.statusLine.classList.add("bad");
-}
-
-function escapeHtml(s) {
-  return (s || "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-function setDetails(html) {
-  els.details.innerHTML = html || "";
-}
-
-function showCurrent() {
-  els.promptEN.textContent = current?.en || "";
-  els.targetKR.textContent = ""; // keep hidden for memory integrity
-}
-
-function isCorrect(user, target) {
-  const nUser = els.lenient.checked ? normalizeLenient(user) : normalizeStrict(user);
-  const nTarget = els.lenient.checked ? normalizeLenient(target) : normalizeStrict(target);
-  return nUser === nTarget;
-}
-
-/** -----------------------
- * Speech Recognition
- * ---------------------*/
-function stopRec() {
-  try { rec && rec.stop(); } catch {}
-  isListening = false;
-  els.micBtn.style.display = "inline-block";
-  els.stopMicBtn.style.display = "none";
-}
-
-function startRec() {
-  if (!els.autoMic.checked) return;
-  if (!speechUnlocked) return; // needs initial user gesture
-  if (!canRecognize()) return;
-
-  // Stop any ongoing TTS (and any previous mic)
-  try { window.speechSynthesis.cancel(); } catch {}
-  stopRec();
-
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  rec = new SR();
-  rec.lang = "ko-KR";
-  rec.interimResults = false;
-  rec.maxAlternatives = 1;
-
-  isListening = true;
-  els.micBtn.style.display = "none";
-  els.stopMicBtn.style.display = "inline-block";
-  setStatus("Listening…", null);
-
-  rec.onresult = (e) => {
-    const t = e.results?.[0]?.[0]?.transcript || "";
-    els.answerInput.value = t.trim();
-    setStatus("", null);
-    // Hands-free: auto-submit once we get a result
+  rec.onresult=(e)=>{
+    const t=e.results[0][0].transcript.trim();
+    document.getElementById("answerInput").value=t;
     handleSubmit();
   };
 
-  rec.onerror = () => {
-    setStatus("", null);
-    stopRec();
-  };
-
-  rec.onend = () => {
-    stopRec();
-  };
-
-  try {
-    rec.start();
-  } catch {
-    stopRec();
-  }
+  rec.start();
 }
 
-/** -----------------------
- * Flow / Queues
- * ---------------------*/
-function pickNextFromFirstPass() {
-  if (firstPassIndex >= firstPassQueue.length) return null;
-  const id = firstPassQueue[firstPassIndex++];
-  return items.find(x => x.id === id) || null;
+function stopRec(){
+  if(rec) rec.stop();
 }
 
-function buildRetestQueue() {
-  let q = Array.from(wrongSet);
-  if (els.autoShuffle.checked) q = shuffle(q);
-  if (q.length > 1 && q[0] === lastRetestId) {
-    const swapIdx = q.findIndex(x => x !== lastRetestId);
-    if (swapIdx > 0) [q[0], q[swapIdx]] = [q[swapIdx], q[0]];
-  }
-  retestQueue = q;
-  retestIndex = 0;
-}
+// -------------------- Flow --------------------
 
-function pickNextFromRetest() {
-  if (retestIndex >= retestQueue.length) return null;
+async function present(){
+  document.getElementById("promptEN").textContent=current.en;
+  document.getElementById("statusLine").textContent="";
+  document.getElementById("details").innerHTML="";
+  document.getElementById("answerInput").value="";
 
-  let nextId = retestQueue[retestIndex];
-
-  if (retestQueue.length > 1 && nextId === lastRetestId) {
-    const altIdx = retestQueue.findIndex((x, idx) => idx >= retestIndex && x !== lastRetestId);
-    if (altIdx !== -1) {
-      [retestQueue[retestIndex], retestQueue[altIdx]] = [retestQueue[altIdx], retestQueue[retestIndex]];
-      nextId = retestQueue[retestIndex];
-    }
+  if(document.getElementById("speakEnglish").checked){
+    await speak(current.en,"en-US");
   }
 
-  retestIndex++;
-  lastRetestId = nextId;
-  return items.find(x => x.id === nextId) || null;
-}
-
-async function presentPromptAndListen() {
-  if (!current) return;
-
-  showCurrent();
-  updatePills();
-  els.answerInput.value = "";
-  setDetails("");
-  setStatus("", null);
-
-  // Speak English prompt automatically
-  if (els.speakEnglish.checked && speechUnlocked) {
-    // make sure mic is not listening while speaking
-    stopRec();
-    await speak(current.en, "en-US");
-  }
-
-  // Then auto-open mic
   startRec();
 }
 
-async function advance() {
+async function advance(){
   stopRec();
 
-  if (phase === "first") {
-    current = pickNextFromFirstPass();
-    if (!current) {
-      if (wrongSet.size > 0) {
-        phase = "retest";
-        buildRetestQueue();
-        current = pickNextFromRetest();
+  if(phase==="first"){
+    if(firstIndex>=firstQueue.length){
+      if(wrongSet.size>0){
+        phase="retest";
+        retestQueue=shuffle([...wrongSet]);
+        retestIndex=0;
       } else {
-        phase = "complete";
+        phase="complete";
       }
     }
-  } else if (phase === "retest") {
-    current = pickNextFromRetest();
-    if (!current) phase = "complete";
   }
 
-  if (phase === "complete") {
-    els.promptEN.textContent = "Session complete.";
-    els.targetKR.textContent = "";
-    setStatus("", null);
-    setDetails("");
-    updatePills();
-    stopRec();
+  if(phase==="retest"){
+    if(retestIndex>=retestQueue.length){
+      phase="complete";
+    }
+  }
+
+  if(phase==="complete"){
+    document.getElementById("promptEN").textContent="Session complete.";
     return;
   }
 
-  await presentPromptAndListen();
+  current = phase==="first"
+    ? items.find(x=>x.id===firstQueue[firstIndex++])
+    : items.find(x=>x.id===retestQueue[retestIndex++]);
+
+  updatePills();
+  await present();
 }
 
-/** -----------------------
- * Submit Handling (Your Rules)
- * ---------------------*/
-async function handleSubmit() {
-  if (phase !== "first" && phase !== "retest") return;
-  if (!current) return;
+function updatePills(){
+  document.getElementById("phasePill").textContent="Phase: "+phase;
+  document.getElementById("countPill").textContent=firstIndex+"/"+items.length;
+  document.getElementById("wrongPill").textContent="Wrongs: "+wrongSet.size;
+}
 
+// -------------------- Submit Logic --------------------
+
+async function handleSubmit(){
   stopRec();
+  const attempt=document.getElementById("answerInput").value.trim();
+  const correct=isCorrect(attempt,current.kr);
 
-  const attempt = (els.answerInput.value || "").trim();
-  const correct = isCorrect(attempt, current.kr);
-
-  // Must decide CORRECT/INCORRECT first
-  if (correct) {
-    // ✓ then speak correct KR once, then next English prompt immediately
-    setStatus("✓", true);
-
-    await speak(current.kr, "ko-KR");
-    // If it was previously wrong, remove it so we stop retesting once correct
-    if (wrongSet.has(current.id)) wrongSet.delete(current.id);
-
+  if(correct){
+    document.getElementById("statusLine").textContent="✓";
+    document.getElementById("statusLine").className="status ok";
+    wrongSet.delete(current.id);
     await advance();
     return;
   }
 
-  // Incorrect: interrupt flow, show attempt + correct, require repetition loop
   wrongSet.add(current.id);
+  document.getElementById("statusLine").textContent="INCORRECT";
+  document.getElementById("statusLine").className="status bad";
+  document.getElementById("details").innerHTML=
+    "<b>Your attempt:</b> "+attempt+
+    "<br><b>Correct Korean:</b> "+current.kr+
+    "<br>Repeat it now.";
 
-  setStatus("INCORRECT", false);
-  setDetails(`
-    <div class="muted"><b>Your attempt:</b> ${escapeHtml(attempt)}</div>
-    <div style="margin-top:6px;"><b>Correct Korean:</b> <span class="korean">${escapeHtml(current.kr)}</span></div>
-    <div style="margin-top:10px;" class="muted"><b>Say the correct sentence now.</b></div>
-  `);
+  await speak(current.kr,"ko-KR");
 
-  // Speak correct KR once (clean model), then immediately reopen mic for repetition
-  await speak(current.kr, "ko-KR");
-  // Clear the input so the repetition is fresh
-  els.answerInput.value = "";
-  // Reopen mic to capture repetition; on result it auto-submits again
+  document.getElementById("answerInput").value="";
   startRec();
 }
 
-/** -----------------------
- * Buttons / Events
- * ---------------------*/
-els.startBtn.addEventListener("click", async () => {
-  try {
-    speechUnlocked = true; // user gesture unlocking best-effort audio chain
-    const parsed = parseIsland(els.islandInput.value);
-    items = parsed;
+// -------------------- Start --------------------
 
-    saveIsland();
-
-    const ids = items.map(x => x.id);
-    firstPassQueue = els.autoShuffle.checked ? shuffle(ids) : ids.slice();
-    firstPassIndex = 0;
-
-    wrongSet = new Set();
-    retestQueue = [];
-    retestIndex = 0;
-    lastRetestId = null;
-
-    phase = "first";
-    els.session.style.display = "block";
-
-    await advance();
-  } catch (e) {
-    alert(e.message || String(e));
-  }
+document.getElementById("startBtn").addEventListener("click",async()=>{
+  speechUnlocked=true;
+  items=parseIsland(document.getElementById("islandInput").value);
+  firstQueue=document.getElementById("autoShuffle").checked
+    ? shuffle(items.map(x=>x.id))
+    : items.map(x=>x.id);
+  wrongSet=new Set();
+  firstIndex=0;
+  phase="first";
+  document.getElementById("session").style.display="block";
+  await advance();
 });
 
-els.loadBtn.addEventListener("click", loadIsland);
-els.clearBtn.addEventListener("click", clearSaved);
-
-els.submitBtn.addEventListener("click", handleSubmit);
-els.repeatKRBtn.addEventListener("click", async () => { stopRec(); await speak(current?.kr || "", "ko-KR"); });
-
-els.endBtn.addEventListener("click", () => {
-  stopRec();
-  phase = "idle";
-  items = [];
-  firstPassQueue = [];
-  wrongSet = new Set();
-  retestQueue = [];
-  current = null;
-
-  els.session.style.display = "none";
-  setStatus("", null);
-  setDetails("");
-});
-
-// Manual mic buttons still exist as fallback
-els.micBtn.addEventListener("click", () => { speechUnlocked = true; startRec(); });
-els.stopMicBtn.addEventListener("click", stopRec);
-
-/** -----------------------
- * Service worker registration
- * ---------------------*/
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
-  });
-}
 </script>
 </body>
 </html>
