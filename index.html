@@ -10,11 +10,12 @@
   body{margin:0;background:#0b0b0b;color:#f2f2f2;font-family:system-ui;}
   .wrap{max-width:940px;margin:auto;padding:16px;}
   .card{background:#141414;border:1px solid #2a2a2a;border-radius:16px;padding:14px;margin:12px 0;}
-  textarea,input{width:100%;background:#0f0f0f;color:#fff;border:1px solid #333;border-radius:12px;padding:10px;font-size:16px;}
+  textarea,input,select{width:100%;background:#0f0f0f;color:#fff;border:1px solid #333;border-radius:12px;padding:10px;font-size:16px;}
   button{margin-top:8px;padding:10px 12px;border-radius:12px;border:0;font-weight:700;}
   .primary{background:#f2f2f2;color:#000;}
   .secondary{background:#222;color:#fff;border:1px solid #333;}
   .danger{background:#ff5c5c;color:#000;}
+  .ghost{background:#0f0f0f;color:#fff;border:1px dashed #444;}
   .big{font-size:22px;line-height:1.35;}
   .status{font-weight:900;margin-top:10px;}
   .ok{color:#9bff9b;}
@@ -24,6 +25,7 @@
   label{display:block;margin:6px 0;}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
   .row > div{flex:1;min-width:220px;}
+  .btnrow{display:flex;gap:10px;flex-wrap:wrap;}
 </style>
 </head>
 <body>
@@ -42,10 +44,12 @@ KO: 저는 산책하는 것을 좋아해요.</pre>
         <div class="muted" style="font-size:12px;margin-bottom:6px;">Island name (for saving/loading)</div>
         <input id="islandName" placeholder="e.g., Prompt Style 1" />
       </div>
-      <div style="flex:0.8;min-width:180px;">
-        <button class="secondary" id="saveBtn">Save</button>
-        <button class="secondary" id="loadBtn">Load</button>
-        <button class="secondary" id="deleteBtn">Delete</button>
+      <div style="flex:0.9;min-width:240px;">
+        <div class="btnrow">
+          <button class="secondary" id="saveBtn" style="flex:1;">Save</button>
+          <button class="secondary" id="loadBtn" style="flex:1;">Load</button>
+          <button class="secondary" id="deleteBtn" style="flex:1;">Delete</button>
+        </div>
       </div>
     </div>
 
@@ -55,7 +59,6 @@ KO: 안녕하세요, 만나서 반가워요."></textarea>
     <div class="row">
       <div>
         <label><input type="checkbox" id="autoShuffle" checked> Auto Shuffle</label>
-        <label><input type="checkbox" id="lenient" checked> Lenient matching (recommended)</label>
       </div>
       <div>
         <label><input type="checkbox" id="speakEnglish" checked> Speak EN prompt (English only)</label>
@@ -63,7 +66,7 @@ KO: 안녕하세요, 만나서 반가워요."></textarea>
       </div>
       <div>
         <div class="muted" style="font-size:12px;margin-bottom:6px;">Leniency level</div>
-        <select id="leniencyLevel" style="width:100%;background:#0f0f0f;color:#fff;border:1px solid #333;border-radius:12px;padding:10px;font-size:16px;">
+        <select id="leniencyLevel">
           <option value="strict">Strict (exact)</option>
           <option value="normal" selected>Normal (recommended)</option>
           <option value="very">Very lenient (voice)</option>
@@ -71,9 +74,11 @@ KO: 안녕하세요, 만나서 반가워요."></textarea>
       </div>
     </div>
 
-    <button class="primary" id="startBtn">Start Session</button>
-    <button class="secondary" id="stopBtn" style="display:none;">Stop Listening</button>
-    <button class="danger" id="endBtn" style="display:none;">End Session</button>
+    <div class="btnrow">
+      <button class="primary" id="startBtn" style="flex:1;">Start Session</button>
+      <button class="secondary" id="stopBtn" style="display:none;flex:1;">Stop Listening</button>
+      <button class="danger" id="endBtn" style="display:none;flex:1;">End Session</button>
+    </div>
 
     <div class="muted" style="margin-top:10px;font-size:12px;">
       Voice selected: <span id="voiceInfo">loading…</span>
@@ -83,6 +88,12 @@ KO: 안녕하세요, 만나서 반가워요."></textarea>
   <div class="card" id="session" style="display:none;">
     <div class="big" id="promptEN"></div>
     <div class="muted" id="micState" style="margin-top:6px;"></div>
+
+    <div class="btnrow">
+      <button class="ghost" id="markCorrectBtn" style="flex:1;">Mark Correct (Skip)</button>
+      <button class="secondary" id="repeatPromptBtn" style="flex:1;">Repeat English</button>
+    </div>
+
     <input id="answerInput" placeholder="(Voice fills automatically)"/>
     <div class="status" id="statusLine"></div>
     <div id="details" style="margin-top:8px;"></div>
@@ -91,6 +102,10 @@ KO: 안녕하세요, 만나서 반가워요."></textarea>
       <span class="pill" id="phasePill"></span>
       <span class="pill" id="countPill"></span>
       <span class="pill" id="wrongPill"></span>
+    </div>
+
+    <div class="muted" style="margin-top:10px;font-size:12px;">
+      “Wrongs” counts items you missed at least once this session.
     </div>
   </div>
 </div>
@@ -116,14 +131,12 @@ function koreanOnly(s){
 }
 
 function canonicalKorean(s){
-  // Korean only, no spaces, no punctuation-ish
   return koreanOnly(s)
     .replace(/[.,!?~…]/g,"")
     .replace(/\s+/g,"")
     .trim();
 }
 
-// Simple Levenshtein distance (for lenient matching)
 function levenshtein(a,b){
   const n=a.length, m=b.length;
   if(n===0) return m;
@@ -144,7 +157,6 @@ function levenshtein(a,b){
 }
 
 function similarity(a,b){
-  // 1.0 = identical
   const A=canonicalKorean(a), B=canonicalKorean(b);
   const maxLen=Math.max(A.length,B.length);
   if(maxLen===0) return 1;
@@ -154,26 +166,15 @@ function similarity(a,b){
 
 function isCorrect(user, target){
   const mode=document.getElementById("leniencyLevel").value;
-
   const U=canonicalKorean(user);
   const T=canonicalKorean(target);
 
-  if (mode==="strict"){
-    return U===T;
-  }
-
+  if (mode==="strict") return U===T;
   if (U===T) return true;
 
-  // Similarity thresholds
   const sim = similarity(U,T);
-
-  if (mode==="normal"){
-    // allow small STT differences
-    return sim >= 0.90;
-  }
-
-  // very lenient
-  return sim >= 0.84;
+  if (mode==="normal") return sim >= 0.90;
+  return sim >= 0.84; // very lenient
 }
 
 function escapeHtml(s){
@@ -308,6 +309,7 @@ function deleteIsland(){
 // Session State
 // =========================
 let items=[], firstQueue=[], wrongSet=new Set(), retestQueue=[];
+let missedEver=new Set(); // NEW: counts anything missed at least once in session
 let phase="idle", current=null, firstIndex=0, retestIndex=0;
 
 let rec=null, speechUnlocked=false;
@@ -320,12 +322,13 @@ const els={
   answerInput:document.getElementById("answerInput"),
   statusLine:document.getElementById("statusLine"),
   details:document.getElementById("details"),
-  session:document.getElementById("session"),
   stopBtn:document.getElementById("stopBtn"),
   endBtn:document.getElementById("endBtn"),
   phasePill:document.getElementById("phasePill"),
   countPill:document.getElementById("countPill"),
-  wrongPill:document.getElementById("wrongPill")
+  wrongPill:document.getElementById("wrongPill"),
+  markCorrectBtn:document.getElementById("markCorrectBtn"),
+  repeatPromptBtn:document.getElementById("repeatPromptBtn")
 };
 
 function setStatus(text, okNull){
@@ -336,7 +339,8 @@ function updatePills(){
   els.phasePill.textContent="Phase: "+phase;
   const done = Math.min(items.length, phase==="first" ? firstIndex : (phase==="retest" ? (firstQueue.length + retestIndex) : items.length));
   els.countPill.textContent = done + "/" + items.length;
-  els.wrongPill.textContent = "Wrongs: " + wrongSet.size;
+  // NEW: show missedEver, not wrongSet
+  els.wrongPill.textContent = "Wrongs: " + missedEver.size;
 }
 
 function clearPendingMic(){
@@ -377,7 +381,7 @@ function startRec(){
     const raw=(e.results?.[0]?.[0]?.transcript||"").trim();
 
     const tooSoon=(Date.now()-lastSpokenAt)<2200;
-    if(tooSoon && normalizeLenient(raw)===normalizeLenient(lastSpoken)){
+    if(tooSoon && canonicalKorean(raw)===canonicalKorean(lastSpoken)){
       startRecDelayed(200);
       return;
     }
@@ -409,7 +413,7 @@ function startRec(){
 }
 
 // =========================
-// Flow (EN prompt ONLY)
+// Flow (EN prompt only)
 // =========================
 async function presentPrompt(){
   els.promptEN.textContent=current.en;
@@ -421,15 +425,12 @@ async function presentPrompt(){
   stopRec();
   busy=true;
 
-  // Speak ONLY English prompt
   if(document.getElementById("speakEnglish").checked){
     markSpoken(current.en);
     await speak(current.en, "en-US", EN_VOICE);
   }
 
   busy=false;
-
-  // delay to avoid mic catching tail end of EN TTS
   startRecDelayed(550);
 }
 
@@ -438,14 +439,22 @@ function pickNext(){
     if(firstIndex>=firstQueue.length){
       if(wrongSet.size>0){
         phase="retest";
-        retestQueue=document.getElementById("autoShuffle").checked ? shuffle([...wrongSet]) : [...wrongSet];
+        retestQueue = shuffle([...wrongSet]); // only things still wrong
         retestIndex=0;
       } else {
         phase="complete";
       }
     }
   } else if(phase==="retest"){
-    if(retestIndex>=retestQueue.length) phase="complete";
+    if(retestIndex>=retestQueue.length){
+      // If you still have wrongSet (because something got re-added during retest), run another retest wave
+      if (wrongSet.size>0){
+        retestQueue = shuffle([...wrongSet]);
+        retestIndex = 0;
+      } else {
+        phase="complete";
+      }
+    }
   }
 
   if(phase==="complete") return null;
@@ -472,7 +481,43 @@ async function advance(){
 }
 
 // =========================
-// Submit logic (KO spoken only when incorrect)
+// Manual Mark Correct (Skip)
+// =========================
+async function markCorrect(){
+  if (busy) return;
+  if(phase!=="first" && phase!=="retest") return;
+  if(!current) return;
+
+  busy=true;
+  stopRec();
+
+  // Treat as correct for progression:
+  setStatus("✓", true);
+
+  // Clear from retest-needed set so it won’t keep coming back
+  wrongSet.delete(current.id);
+
+  // NOTE: We do NOT remove from missedEver (it tracks missed-at-least-once)
+  // If you want "Mark Correct" to not count as missed, leave missedEver unchanged.
+
+  busy=false;
+  await advance();
+}
+
+// Repeat prompt button
+async function repeatPrompt(){
+  if (busy) return;
+  if(!current) return;
+  stopRec();
+  busy=true;
+  markSpoken(current.en);
+  await speak(current.en, "en-US", EN_VOICE);
+  busy=false;
+  startRecDelayed(450);
+}
+
+// =========================
+// Submit logic (tracks wrongs correctly)
 // =========================
 async function handleSubmit(){
   if (busy) return;
@@ -487,13 +532,17 @@ async function handleSubmit(){
 
   if(isCorrect(attempt, target)){
     setStatus("✓", true);
+    // If it was wrong earlier, we now clear it from retest-needed
     wrongSet.delete(current.id);
     busy=false;
     await advance();
     return;
   }
 
-  wrongSet.add(current.id);
+  // Wrong: add to both tracking sets
+  wrongSet.add(current.id);      // needs retest until correct
+  missedEver.add(current.id);    // missed at least once this session
+
   setStatus("INCORRECT", false);
   els.details.innerHTML = `
     <div class="muted"><b>Your attempt (KR only):</b> ${escapeHtml(attempt)}</div>
@@ -501,14 +550,14 @@ async function handleSubmit(){
     <div style="margin-top:10px;" class="muted"><b>Repeat the correct Korean now.</b></div>
   `;
 
-  // Speak Korean ONLY after incorrect
+  // Speak Korean only after incorrect
   markSpoken(current.kr);
   await speak(current.kr, "ko-KR", KO_VOICE);
 
   els.answerInput.value="";
   busy=false;
 
-  // re-open mic for repetition
+  updatePills();
   startRecDelayed(550);
 }
 
@@ -518,6 +567,9 @@ async function handleSubmit(){
 document.getElementById("saveBtn").addEventListener("click", saveIsland);
 document.getElementById("loadBtn").addEventListener("click", loadIsland);
 document.getElementById("deleteBtn").addEventListener("click", deleteIsland);
+
+els.markCorrectBtn.addEventListener("click", markCorrect);
+els.repeatPromptBtn.addEventListener("click", repeatPrompt);
 
 document.getElementById("startBtn").addEventListener("click", async ()=>{
   speechUnlocked = true;
@@ -533,6 +585,7 @@ document.getElementById("startBtn").addEventListener("click", async ()=>{
   firstQueue = document.getElementById("autoShuffle").checked ? shuffle(ids) : ids.slice();
 
   wrongSet = new Set();
+  missedEver = new Set();
   retestQueue = [];
   phase = "first";
   firstIndex = 0;
@@ -541,6 +594,7 @@ document.getElementById("startBtn").addEventListener("click", async ()=>{
   document.getElementById("session").style.display="block";
   els.endBtn.style.display="inline-block";
 
+  updatePills();
   await advance();
 });
 
@@ -551,7 +605,7 @@ els.endBtn.addEventListener("click", ()=>{
   stopRec();
   phase="idle";
   current=null;
-  items=[]; firstQueue=[]; wrongSet=new Set(); retestQueue=[];
+  items=[]; firstQueue=[]; wrongSet=new Set(); missedEver=new Set(); retestQueue=[];
   els.promptEN.textContent="";
   els.details.innerHTML="";
   els.answerInput.value="";
@@ -560,7 +614,7 @@ els.endBtn.addEventListener("click", ()=>{
   els.endBtn.style.display="none";
 });
 
-// Init voices display + last name
+// Init voices + last name
 waitForVoices();
 const last = localStorage.getItem(LAST_KEY);
 if (last) document.getElementById("islandName").value = last;
