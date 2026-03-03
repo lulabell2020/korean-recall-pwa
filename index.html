@@ -58,11 +58,16 @@ KO: 안녕하세요, 만나서 반가워요."></textarea>
         <label><input type="checkbox" id="lenient" checked> Lenient matching (recommended)</label>
       </div>
       <div>
-        <label><input type="checkbox" id="speakEnglish" checked> Speak EN prompt</label>
-        <label><input type="checkbox" id="speakKoreanPrompt" checked> Speak KO prompt (before you answer)</label>
+        <label><input type="checkbox" id="speakEnglish" checked> Speak EN prompt (English only)</label>
+        <label><input type="checkbox" id="autoMic" checked> Auto-open mic after prompt</label>
       </div>
       <div>
-        <label><input type="checkbox" id="autoMic" checked> Auto-open mic after prompts</label>
+        <div class="muted" style="font-size:12px;margin-bottom:6px;">Leniency level</div>
+        <select id="leniencyLevel" style="width:100%;background:#0f0f0f;color:#fff;border:1px solid #333;border-radius:12px;padding:10px;font-size:16px;">
+          <option value="strict">Strict (exact)</option>
+          <option value="normal" selected>Normal (recommended)</option>
+          <option value="very">Very lenient (voice)</option>
+        </select>
       </div>
     </div>
 
@@ -110,22 +115,65 @@ function koreanOnly(s){
     .trim();
 }
 
-function normalizeLenient(s){
-  return (s||"")
-    .trim()
-    .replace(/[“”]/g,'"').replace(/[‘’]/g,"'")
+function canonicalKorean(s){
+  // Korean only, no spaces, no punctuation-ish
+  return koreanOnly(s)
     .replace(/[.,!?~…]/g,"")
-    .replace(/[()]/g,"")
-    .replace(/\u200b/g,"")
-    .replace(/\s+/g,"");
+    .replace(/\s+/g,"")
+    .trim();
 }
-function normalizeStrict(s){ return (s||"").trim(); }
+
+// Simple Levenshtein distance (for lenient matching)
+function levenshtein(a,b){
+  const n=a.length, m=b.length;
+  if(n===0) return m;
+  if(m===0) return n;
+  const dp=new Array(m+1);
+  for(let j=0;j<=m;j++) dp[j]=j;
+  for(let i=1;i<=n;i++){
+    let prev=dp[0];
+    dp[0]=i;
+    for(let j=1;j<=m;j++){
+      const temp=dp[j];
+      const cost=(a[i-1]===b[j-1])?0:1;
+      dp[j]=Math.min(dp[j]+1, dp[j-1]+1, prev+cost);
+      prev=temp;
+    }
+  }
+  return dp[m];
+}
+
+function similarity(a,b){
+  // 1.0 = identical
+  const A=canonicalKorean(a), B=canonicalKorean(b);
+  const maxLen=Math.max(A.length,B.length);
+  if(maxLen===0) return 1;
+  const d=levenshtein(A,B);
+  return 1 - (d/maxLen);
+}
 
 function isCorrect(user, target){
-  const len=document.getElementById("lenient").checked;
-  const u=len?normalizeLenient(user):normalizeStrict(user);
-  const t=len?normalizeLenient(target):normalizeStrict(target);
-  return u===t;
+  const mode=document.getElementById("leniencyLevel").value;
+
+  const U=canonicalKorean(user);
+  const T=canonicalKorean(target);
+
+  if (mode==="strict"){
+    return U===T;
+  }
+
+  if (U===T) return true;
+
+  // Similarity thresholds
+  const sim = similarity(U,T);
+
+  if (mode==="normal"){
+    // allow small STT differences
+    return sim >= 0.90;
+  }
+
+  // very lenient
+  return sim >= 0.84;
 }
 
 function escapeHtml(s){
@@ -212,7 +260,6 @@ function parseTaggedIsland(text){
       currentEN=null;
       continue;
     }
-    // ignore untagged lines
   }
 
   if (currentEN) throw new Error("Last EN: line has no matching KO: line.");
@@ -264,8 +311,7 @@ let items=[], firstQueue=[], wrongSet=new Set(), retestQueue=[];
 let phase="idle", current=null, firstIndex=0, retestIndex=0;
 
 let rec=null, speechUnlocked=false;
-let micActive=false;
-let busy=false;          // prevents double-submit / overlapping async
+let busy=false;
 let pendingMicTimer=null;
 
 const els={
@@ -296,16 +342,13 @@ function updatePills(){
 function clearPendingMic(){
   if (pendingMicTimer) { clearTimeout(pendingMicTimer); pendingMicTimer=null; }
 }
-
 function stopRec(){
   clearPendingMic();
-  micActive=false;
   try{ rec && rec.stop(); }catch{}
   rec=null;
   els.micState.textContent="";
   els.stopBtn.style.display="none";
 }
-
 function startRecDelayed(ms){
   clearPendingMic();
   pendingMicTimer = setTimeout(()=>startRec(), ms);
@@ -319,7 +362,6 @@ function startRec(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR) return;
 
-  // Prevent overlapping mic sessions
   stopRec();
 
   rec=new SR();
@@ -327,7 +369,6 @@ function startRec(){
   rec.interimResults=false;
   rec.maxAlternatives=1;
 
-  micActive=true;
   els.micState.textContent="Listening…";
   els.stopBtn.style.display="inline-block";
 
@@ -335,10 +376,8 @@ function startRec(){
     if (busy) return;
     const raw=(e.results?.[0]?.[0]?.transcript||"").trim();
 
-    // echo guard
     const tooSoon=(Date.now()-lastSpokenAt)<2200;
     if(tooSoon && normalizeLenient(raw)===normalizeLenient(lastSpoken)){
-      // restart listening
       startRecDelayed(200);
       return;
     }
@@ -350,21 +389,17 @@ function startRec(){
     }
 
     els.answerInput.value = kr;
-    handleSubmit(); // auto-submit
+    handleSubmit();
   };
 
   rec.onerror=()=>{
-    micActive=false;
     stopRec();
-    // try again if in-session
     if((phase==="first"||phase==="retest") && !busy){
       startRecDelayed(300);
     }
   };
 
   rec.onend=()=>{
-    micActive=false;
-    // If we are mid-session and not busy, keep the mic alive
     if((phase==="first"||phase==="retest") && !busy){
       startRecDelayed(300);
     }
@@ -374,7 +409,7 @@ function startRec(){
 }
 
 // =========================
-// Flow
+// Flow (EN prompt ONLY)
 // =========================
 async function presentPrompt(){
   els.promptEN.textContent=current.en;
@@ -386,20 +421,15 @@ async function presentPrompt(){
   stopRec();
   busy=true;
 
-  // Speak EN then KO (your preference)
+  // Speak ONLY English prompt
   if(document.getElementById("speakEnglish").checked){
     markSpoken(current.en);
     await speak(current.en, "en-US", EN_VOICE);
   }
 
-  if(document.getElementById("speakKoreanPrompt").checked){
-    markSpoken(current.kr);
-    await speak(current.kr, "ko-KR", KO_VOICE);
-  }
-
   busy=false;
 
-  // Delay to avoid mic catching TTS tail
+  // delay to avoid mic catching tail end of EN TTS
   startRecDelayed(550);
 }
 
@@ -442,7 +472,7 @@ async function advance(){
 }
 
 // =========================
-// Submit logic (fixes “incorrect glitch”)
+// Submit logic (KO spoken only when incorrect)
 // =========================
 async function handleSubmit(){
   if (busy) return;
@@ -453,7 +483,7 @@ async function handleSubmit(){
   stopRec();
 
   const attempt = koreanOnly((els.answerInput.value||"").trim());
-  const target  = koreanOnly((current.kr||"").trim());
+  const target  = (current.kr||"").trim();
 
   if(isCorrect(attempt, target)){
     setStatus("✓", true);
@@ -463,7 +493,6 @@ async function handleSubmit(){
     return;
   }
 
-  // Incorrect: show correction, speak correct KO once, force repeat (do not advance)
   wrongSet.add(current.id);
   setStatus("INCORRECT", false);
   els.details.innerHTML = `
@@ -472,14 +501,14 @@ async function handleSubmit(){
     <div style="margin-top:10px;" class="muted"><b>Repeat the correct Korean now.</b></div>
   `;
 
+  // Speak Korean ONLY after incorrect
   markSpoken(current.kr);
   await speak(current.kr, "ko-KR", KO_VOICE);
 
-  // Clear input so repetition is fresh
   els.answerInput.value="";
   busy=false;
 
-  // Re-open mic for repetition
+  // re-open mic for repetition
   startRecDelayed(550);
 }
 
@@ -494,7 +523,6 @@ document.getElementById("startBtn").addEventListener("click", async ()=>{
   speechUnlocked = true;
   await waitForVoices();
 
-  // Auto-load last island name (nice UX)
   const name = (document.getElementById("islandName").value || "").trim();
   if (name) localStorage.setItem(LAST_KEY, name);
 
@@ -532,10 +560,8 @@ els.endBtn.addEventListener("click", ()=>{
   els.endBtn.style.display="none";
 });
 
-// Initialize voices display
+// Init voices display + last name
 waitForVoices();
-
-// Optional: prefill last island name
 const last = localStorage.getItem(LAST_KEY);
 if (last) document.getElementById("islandName").value = last;
 </script>
