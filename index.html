@@ -16,6 +16,7 @@
   .secondary{background:#222;color:#fff;border:1px solid #333;}
   .danger{background:#ff5c5c;color:#000;}
   .ghost{background:#0f0f0f;color:#fff;border:1px dashed #444;}
+  .okbtn{background:#2a2a2a;color:#fff;border:1px solid #444;}
   .big{font-size:22px;line-height:1.35;}
   .status{font-weight:900;margin-top:10px;}
   .ok{color:#9bff9b;}
@@ -90,8 +91,13 @@ KO: 안녕하세요, 만나서 반가워요."></textarea>
     <div class="muted" id="micState" style="margin-top:6px;"></div>
 
     <div class="btnrow">
-      <button class="ghost" id="markCorrectBtn" style="flex:1;">Mark Correct (Skip)</button>
+      <button class="ghost" id="skipCountsWrongBtn" style="flex:1;">Skip (counts wrong)</button>
+      <button class="ghost" id="skipForgiveBtn" style="flex:1;">Skip (forgive)</button>
       <button class="secondary" id="repeatPromptBtn" style="flex:1;">Repeat English</button>
+    </div>
+
+    <div class="btnrow">
+      <button class="primary" id="continueBtn" style="display:none;flex:1;">Continue</button>
     </div>
 
     <input id="answerInput" placeholder="(Voice fills automatically)"/>
@@ -105,7 +111,7 @@ KO: 안녕하세요, 만나서 반가워요."></textarea>
     </div>
 
     <div class="muted" style="margin-top:10px;font-size:12px;">
-      “Wrongs” counts items you missed at least once this session.
+      “Wrongs” counts items you missed (or skipped as wrong) at least once this session. “Forgive” skips don’t count.
     </div>
   </div>
 </div>
@@ -131,10 +137,7 @@ function koreanOnly(s){
 }
 
 function canonicalKorean(s){
-  return koreanOnly(s)
-    .replace(/[.,!?~…]/g,"")
-    .replace(/\s+/g,"")
-    .trim();
+  return koreanOnly(s).replace(/[.,!?~…]/g,"").replace(/\s+/g,"").trim();
 }
 
 function levenshtein(a,b){
@@ -174,7 +177,7 @@ function isCorrect(user, target){
 
   const sim = similarity(U,T);
   if (mode==="normal") return sim >= 0.90;
-  return sim >= 0.84; // very lenient
+  return sim >= 0.84;
 }
 
 function escapeHtml(s){
@@ -264,7 +267,7 @@ function parseTaggedIsland(text){
   }
 
   if (currentEN) throw new Error("Last EN: line has no matching KO: line.");
-  if (!pairs.length) throw new Error("No EN:/KO: pairs found. Make sure your island uses EN: and KO: tags.");
+  if (!pairs.length) throw new Error("No EN:/KO: pairs found.");
 
   return pairs.map((p,i)=>({ ...p, id:String(i) }));
 }
@@ -308,9 +311,16 @@ function deleteIsland(){
 // =========================
 // Session State
 // =========================
-let items=[], firstQueue=[], wrongSet=new Set(), retestQueue=[];
-let missedEver=new Set(); // NEW: counts anything missed at least once in session
-let phase="idle", current=null, firstIndex=0, retestIndex=0;
+let items=[], firstQueue=[];
+let missedEver=new Set();     // missed at least once (drives retest)
+let forgivenSet=new Set();    // skipped/forgiven; never retested; never counted wrong
+let phase="idle";             // "first" | "retest" | "between" | "complete"
+let retestRound=0;            // 1,2,3...
+let current=null;
+let firstIndex=0;
+let retestQueue=[];
+let retestIndex=0;
+let nextRoundSet=new Set();   // items missed during current retest round
 
 let rec=null, speechUnlocked=false;
 let busy=false;
@@ -327,20 +337,35 @@ const els={
   phasePill:document.getElementById("phasePill"),
   countPill:document.getElementById("countPill"),
   wrongPill:document.getElementById("wrongPill"),
-  markCorrectBtn:document.getElementById("markCorrectBtn"),
-  repeatPromptBtn:document.getElementById("repeatPromptBtn")
+  repeatPromptBtn:document.getElementById("repeatPromptBtn"),
+  skipCountsWrongBtn:document.getElementById("skipCountsWrongBtn"),
+  skipForgiveBtn:document.getElementById("skipForgiveBtn"),
+  continueBtn:document.getElementById("continueBtn"),
 };
 
 function setStatus(text, okNull){
   els.statusLine.textContent=text;
   els.statusLine.className="status"+(okNull===true?" ok":okNull===false?" bad":"");
 }
+
+function wrongCount(){
+  // count missedEver excluding forgiven
+  let c=0;
+  for(const id of missedEver){ if(!forgivenSet.has(id)) c++; }
+  return c;
+}
+
 function updatePills(){
-  els.phasePill.textContent="Phase: "+phase;
-  const done = Math.min(items.length, phase==="first" ? firstIndex : (phase==="retest" ? (firstQueue.length + retestIndex) : items.length));
-  els.countPill.textContent = done + "/" + items.length;
-  // NEW: show missedEver, not wrongSet
-  els.wrongPill.textContent = "Wrongs: " + missedEver.size;
+  els.phasePill.textContent =
+    phase==="first" ? "Phase: first pass" :
+    phase==="retest" ? `Phase: retest ${retestRound}` :
+    phase==="between" ? "Phase: between" :
+    phase==="complete" ? "Phase: complete" :
+    "Phase: idle";
+
+  const doneFirst = Math.min(firstIndex, items.length);
+  els.countPill.textContent = `${doneFirst}/${items.length}`;
+  els.wrongPill.textContent = "Wrongs: " + wrongCount();
 }
 
 function clearPendingMic(){
@@ -362,6 +387,7 @@ function startRec(){
   if (!speechUnlocked) return;
   if (!document.getElementById("autoMic").checked) return;
   if (busy) return;
+  if (phase!=="first" && phase!=="retest") return;
 
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR) return;
@@ -413,9 +439,17 @@ function startRec(){
 }
 
 // =========================
-// Flow (EN prompt only)
+// Prompt + progression
 // =========================
+async function speakEnglishPrompt(){
+  if(!current) return;
+  if(!document.getElementById("speakEnglish").checked) return;
+  markSpoken(current.en);
+  await speak(current.en, "en-US", EN_VOICE);
+}
+
 async function presentPrompt(){
+  els.continueBtn.style.display="none";
   els.promptEN.textContent=current.en;
   els.details.innerHTML="";
   els.answerInput.value="";
@@ -425,99 +459,160 @@ async function presentPrompt(){
   stopRec();
   busy=true;
 
-  if(document.getElementById("speakEnglish").checked){
-    markSpoken(current.en);
-    await speak(current.en, "en-US", EN_VOICE);
-  }
+  await speakEnglishPrompt();
 
   busy=false;
   startRecDelayed(550);
 }
 
-function pickNext(){
+function buildRetestQueueFromMissedEver(){
+  const arr=[];
+  for(const id of missedEver){
+    if(!forgivenSet.has(id)) arr.push(id);
+  }
+  return shuffle(arr);
+}
+
+function nextItem(){
   if(phase==="first"){
-    if(firstIndex>=firstQueue.length){
-      if(wrongSet.size>0){
-        phase="retest";
-        retestQueue = shuffle([...wrongSet]); // only things still wrong
-        retestIndex=0;
-      } else {
-        phase="complete";
-      }
-    }
-  } else if(phase==="retest"){
-    if(retestIndex>=retestQueue.length){
-      // If you still have wrongSet (because something got re-added during retest), run another retest wave
-      if (wrongSet.size>0){
-        retestQueue = shuffle([...wrongSet]);
-        retestIndex = 0;
-      } else {
-        phase="complete";
-      }
-    }
+    if(firstIndex >= firstQueue.length) return null;
+    const id = firstQueue[firstIndex++];
+    return items.find(x=>x.id===id) || null;
   }
 
-  if(phase==="complete") return null;
+  if(phase==="retest"){
+    if(retestIndex >= retestQueue.length) return null;
+    const id = retestQueue[retestIndex++];
+    return items.find(x=>x.id===id) || null;
+  }
 
-  const id = (phase==="first") ? firstQueue[firstIndex++] : retestQueue[retestIndex++];
-  return items.find(x=>x.id===id) || null;
+  return null;
+}
+
+function goBetween(message, nextPhase){
+  phase="between";
+  stopRec();
+  els.promptEN.textContent = message;
+  els.details.innerHTML = "";
+  setStatus("", null);
+  els.continueBtn.style.display="inline-block";
+  els.continueBtn.dataset.nextPhase = nextPhase;
+  updatePills();
 }
 
 async function advance(){
   stopRec();
-  current = pickNext();
 
-  if(!current){
-    phase="complete";
-    els.promptEN.textContent="Session complete.";
-    els.details.innerHTML="";
-    setStatus("", null);
-    updatePills();
-    stopRec();
+  // Phase transitions when list is exhausted
+  if(phase==="first"){
+    const nxt = nextItem();
+    if(!nxt){
+      // Finished first pass
+      const rq = buildRetestQueueFromMissedEver();
+      if(rq.length>0){
+        // wait for user to continue into retest
+        retestQueue = rq;
+        retestIndex = 0;
+        retestRound = 1;
+        nextRoundSet = new Set();
+        goBetween(`First pass complete. Retest ${rq.length} items.`, "retest");
+        return;
+      }
+      phase="complete";
+      els.promptEN.textContent="Session complete.";
+      updatePills();
+      return;
+    }
+    current = nxt;
+    await presentPrompt();
     return;
   }
 
-  await presentPrompt();
+  if(phase==="retest"){
+    const nxt = nextItem();
+    if(!nxt){
+      // Finished a retest round
+      if(nextRoundSet.size > 0){
+        // prepare another retest round from items missed in this retest
+        retestQueue = shuffle([...nextRoundSet].filter(id => !forgivenSet.has(id)));
+        retestIndex = 0;
+        nextRoundSet = new Set();
+        retestRound += 1;
+        goBetween(`Retest round complete. Next round: ${retestQueue.length} items.`, "retest");
+        return;
+      }
+      phase="complete";
+      els.promptEN.textContent="Session complete.";
+      updatePills();
+      return;
+    }
+    current = nxt;
+    await presentPrompt();
+    return;
+  }
 }
 
 // =========================
-// Manual Mark Correct (Skip)
+// Buttons: skip / forgive / repeat / continue
 // =========================
-async function markCorrect(){
-  if (busy) return;
+async function skipCountsWrong(){
+  if(busy) return;
   if(phase!=="first" && phase!=="retest") return;
   if(!current) return;
 
   busy=true;
   stopRec();
 
-  // Treat as correct for progression:
+  // This skip should count as missed and appear in retest
+  missedEver.add(current.id);
+
   setStatus("✓", true);
-
-  // Clear from retest-needed set so it won’t keep coming back
-  wrongSet.delete(current.id);
-
-  // NOTE: We do NOT remove from missedEver (it tracks missed-at-least-once)
-  // If you want "Mark Correct" to not count as missed, leave missedEver unchanged.
-
   busy=false;
   await advance();
 }
 
-// Repeat prompt button
+async function skipForgive(){
+  if(busy) return;
+  if(phase!=="first" && phase!=="retest") return;
+  if(!current) return;
+
+  busy=true;
+  stopRec();
+
+  // Forgive: do NOT count wrong and do NOT retest
+  forgivenSet.add(current.id);
+  // Also ensure it doesn't linger as "missed"
+  missedEver.delete(current.id);
+
+  setStatus("✓", true);
+  busy=false;
+  await advance();
+}
+
 async function repeatPrompt(){
-  if (busy) return;
+  if(busy) return;
   if(!current) return;
   stopRec();
   busy=true;
-  markSpoken(current.en);
-  await speak(current.en, "en-US", EN_VOICE);
+  await speakEnglishPrompt();
   busy=false;
   startRecDelayed(450);
 }
 
+async function continuePhases(){
+  const next = els.continueBtn.dataset.nextPhase;
+  els.continueBtn.style.display="none";
+
+  if(next==="retest"){
+    phase="retest";
+    updatePills();
+    await advance();
+    return;
+  }
+}
+
 // =========================
-// Submit logic (tracks wrongs correctly)
+// Submit logic
 // =========================
 async function handleSubmit(){
   if (busy) return;
@@ -532,16 +627,18 @@ async function handleSubmit(){
 
   if(isCorrect(attempt, target)){
     setStatus("✓", true);
-    // If it was wrong earlier, we now clear it from retest-needed
-    wrongSet.delete(current.id);
     busy=false;
     await advance();
     return;
   }
 
-  // Wrong: add to both tracking sets
-  wrongSet.add(current.id);      // needs retest until correct
-  missedEver.add(current.id);    // missed at least once this session
+  // Wrong: always counts as missed (unless user later uses Forgive skip on that card)
+  missedEver.add(current.id);
+
+  // If we’re in a retest round, and you miss it again, it should appear in NEXT retest round.
+  if(phase==="retest"){
+    nextRoundSet.add(current.id);
+  }
 
   setStatus("INCORRECT", false);
   els.details.innerHTML = `
@@ -568,8 +665,10 @@ document.getElementById("saveBtn").addEventListener("click", saveIsland);
 document.getElementById("loadBtn").addEventListener("click", loadIsland);
 document.getElementById("deleteBtn").addEventListener("click", deleteIsland);
 
-els.markCorrectBtn.addEventListener("click", markCorrect);
+els.skipCountsWrongBtn.addEventListener("click", skipCountsWrong);
+els.skipForgiveBtn.addEventListener("click", skipForgive);
 els.repeatPromptBtn.addEventListener("click", repeatPrompt);
+els.continueBtn.addEventListener("click", continuePhases);
 
 document.getElementById("startBtn").addEventListener("click", async ()=>{
   speechUnlocked = true;
@@ -581,15 +680,19 @@ document.getElementById("startBtn").addEventListener("click", async ()=>{
   const text = document.getElementById("islandInput").value || "";
   items = parseTaggedIsland(text);
 
-  const ids = items.map(x=>x.id);
-  firstQueue = document.getElementById("autoShuffle").checked ? shuffle(ids) : ids.slice();
+  firstQueue = document.getElementById("autoShuffle").checked
+    ? shuffle(items.map(x=>x.id))
+    : items.map(x=>x.id);
 
-  wrongSet = new Set();
   missedEver = new Set();
+  forgivenSet = new Set();
   retestQueue = [];
+  nextRoundSet = new Set();
   phase = "first";
+  retestRound = 0;
   firstIndex = 0;
   retestIndex = 0;
+  current = null;
 
   document.getElementById("session").style.display="block";
   els.endBtn.style.display="inline-block";
@@ -605,13 +708,19 @@ els.endBtn.addEventListener("click", ()=>{
   stopRec();
   phase="idle";
   current=null;
-  items=[]; firstQueue=[]; wrongSet=new Set(); missedEver=new Set(); retestQueue=[];
+  items=[]; firstQueue=[];
+  missedEver=new Set(); forgivenSet=new Set();
+  retestQueue=[]; nextRoundSet=new Set();
+  retestRound=0;
+  firstIndex=0; retestIndex=0;
   els.promptEN.textContent="";
   els.details.innerHTML="";
   els.answerInput.value="";
   setStatus("", null);
+  els.continueBtn.style.display="none";
   document.getElementById("session").style.display="none";
   els.endBtn.style.display="none";
+  updatePills();
 });
 
 // Init voices + last name
