@@ -35,14 +35,14 @@
 
   <div class="card">
     <div class="muted" style="margin-bottom:8px;">
-      Paste **tagged** pairs (one per line):
-      <pre style="white-space:pre-wrap;background:#0f0f0f;border:1px solid #333;padding:10px;border-radius:12px;margin:8px 0;">EN: I like to go for walks.
+      Paste tagged pairs (one per line):
+<pre style="white-space:pre-wrap;background:#0f0f0f;border:1px solid #333;padding:10px;border-radius:12px;margin:8px 0;">EN: I like to go for walks.
 KO: 저는 산책하는 것을 좋아해요.</pre>
     </div>
 
     <div class="row">
       <div>
-        <div class="muted" style="font-size:12px;margin-bottom:6px;">Island name (for saving/loading)</div>
+        <div class="muted" style="font-size:12px;margin-bottom:6px;">Island name</div>
         <input id="islandName" placeholder="e.g., Prompt Style 1" />
       </div>
       <div style="flex:0.9;min-width:240px;">
@@ -54,679 +54,121 @@ KO: 저는 산책하는 것을 좋아해요.</pre>
       </div>
     </div>
 
-    <textarea id="islandInput" placeholder="EN: Hello, nice to meet you.
-KO: 안녕하세요, 만나서 반가워요."></textarea>
+    <textarea id="islandInput" placeholder="EN: Hello
+KO: 안녕하세요"></textarea>
+
+    <!-- NEW SAVED ISLANDS BOX -->
+    <div class="card" style="margin-top:12px;padding:10px;">
+      <div class="muted" style="font-size:12px;margin-bottom:8px;">Saved islands</div>
+      <div id="savedIslandsList" class="btnrow"></div>
+    </div>
 
     <div class="row">
       <div>
         <label><input type="checkbox" id="autoShuffle" checked> Auto Shuffle</label>
       </div>
       <div>
-        <label><input type="checkbox" id="speakEnglish" checked> Speak EN prompt (English only)</label>
-        <label><input type="checkbox" id="autoMic" checked> Auto-open mic after prompt</label>
+        <label><input type="checkbox" id="speakEnglish" checked> Speak EN</label>
+        <label><input type="checkbox" id="autoMic" checked> Auto mic</label>
       </div>
       <div>
-        <div class="muted" style="font-size:12px;margin-bottom:6px;">Leniency level</div>
         <select id="leniencyLevel">
-          <option value="strict">Strict (exact)</option>
-          <option value="normal" selected>Normal (recommended)</option>
-          <option value="very">Very lenient (voice)</option>
+          <option value="strict">Strict</option>
+          <option value="normal" selected>Normal</option>
+          <option value="very">Very lenient</option>
         </select>
       </div>
     </div>
 
     <div class="btnrow">
-      <button class="primary" id="startBtn" style="flex:1;">Start Session</button>
-      <button class="secondary" id="stopBtn" style="display:none;flex:1;">Stop Listening</button>
-      <button class="danger" id="endBtn" style="display:none;flex:1;">End Session</button>
-    </div>
-
-    <div class="muted" style="margin-top:10px;font-size:12px;">
-      Voice selected: <span id="voiceInfo">loading…</span>
+      <button class="primary" id="startBtn" style="flex:1;">Start</button>
+      <button class="secondary" id="stopBtn" style="display:none;flex:1;">Stop</button>
+      <button class="danger" id="endBtn" style="display:none;flex:1;">End</button>
     </div>
   </div>
 
   <div class="card" id="session" style="display:none;">
     <div class="big" id="promptEN"></div>
-    <div class="muted" id="micState" style="margin-top:6px;"></div>
-
-    <div class="btnrow">
-      <button class="ghost" id="skipCountsWrongBtn" style="flex:1;">Skip (counts wrong)</button>
-      <button class="ghost" id="skipForgiveBtn" style="flex:1;">Skip (forgive)</button>
-      <button class="secondary" id="repeatPromptBtn" style="flex:1;">Repeat English</button>
-    </div>
-
-    <div class="btnrow">
-      <button class="primary" id="continueBtn" style="display:none;flex:1;">Continue</button>
-    </div>
-
-    <input id="answerInput" placeholder="(Voice fills automatically)"/>
+    <input id="answerInput"/>
     <div class="status" id="statusLine"></div>
-    <div id="details" style="margin-top:8px;"></div>
-
-    <div style="margin-top:10px;">
-      <span class="pill" id="phasePill"></span>
-      <span class="pill" id="countPill"></span>
-      <span class="pill" id="wrongPill"></span>
-    </div>
-
-    <div class="muted" style="margin-top:10px;font-size:12px;">
-      “Wrongs” counts items you missed (or skipped as wrong) at least once this session. “Forgive” skips don’t count.
-    </div>
   </div>
 </div>
 
 <script>
-// =========================
-// Helpers
-// =========================
-function shuffle(arr){
-  const a=arr.slice();
-  for(let i=a.length-1;i>0;i--){
-    const j=Math.floor(Math.random()*(i+1));
-    [a[i],a[j]]=[a[j],a[i]];
-  }
-  return a;
-}
 
-function koreanOnly(s){
-  return (s||"")
-    .replace(/[^가-힣\s]/g,"")
-    .replace(/\s+/g," ")
-    .trim();
-}
-
-function canonicalKorean(s){
-  return koreanOnly(s).replace(/[.,!?~…]/g,"").replace(/\s+/g,"").trim();
-}
-
-function levenshtein(a,b){
-  const n=a.length, m=b.length;
-  if(n===0) return m;
-  if(m===0) return n;
-  const dp=new Array(m+1);
-  for(let j=0;j<=m;j++) dp[j]=j;
-  for(let i=1;i<=n;i++){
-    let prev=dp[0];
-    dp[0]=i;
-    for(let j=1;j<=m;j++){
-      const temp=dp[j];
-      const cost=(a[i-1]===b[j-1])?0:1;
-      dp[j]=Math.min(dp[j]+1, dp[j-1]+1, prev+cost);
-      prev=temp;
-    }
-  }
-  return dp[m];
-}
-
-function similarity(a,b){
-  const A=canonicalKorean(a), B=canonicalKorean(b);
-  const maxLen=Math.max(A.length,B.length);
-  if(maxLen===0) return 1;
-  const d=levenshtein(A,B);
-  return 1 - (d/maxLen);
-}
-
-function isCorrect(user, target){
-  const mode=document.getElementById("leniencyLevel").value;
-  const U=canonicalKorean(user);
-  const T=canonicalKorean(target);
-
-  if (mode==="strict") return U===T;
-  if (U===T) return true;
-
-  const sim = similarity(U,T);
-  if (mode==="normal") return sim >= 0.90;
-  return sim >= 0.84;
-}
-
-function escapeHtml(s){
-  return (s||"")
-    .replaceAll("&","&amp;").replaceAll("<","&lt;")
-    .replaceAll(">","&gt;").replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-// =========================
-// Voice selection
-// =========================
-let VOICES=[], EN_VOICE=null, KO_VOICE=null;
-
-function pickVoices(){
-  VOICES = speechSynthesis.getVoices() || [];
-  EN_VOICE = VOICES.find(v => (v.lang||"").toLowerCase().startsWith("en-us"))
-         || VOICES.find(v => (v.lang||"").toLowerCase().startsWith("en-au"))
-         || VOICES.find(v => (v.lang||"").toLowerCase().startsWith("en"))
-         || null;
-  KO_VOICE = VOICES.find(v => (v.lang||"").toLowerCase().startsWith("ko-kr"))
-         || VOICES.find(v => (v.lang||"").toLowerCase().startsWith("ko"))
-         || null;
-
-  document.getElementById("voiceInfo").textContent =
-    `EN: ${EN_VOICE ? (EN_VOICE.name+" ("+EN_VOICE.lang+")") : "none"} | ` +
-    `KO: ${KO_VOICE ? (KO_VOICE.name+" ("+KO_VOICE.lang+")") : "none"}`;
-}
-
-function waitForVoices(){
-  return new Promise(resolve=>{
-    pickVoices();
-    if ((speechSynthesis.getVoices()||[]).length) return resolve();
-    let tries=0;
-    const t=setInterval(()=>{
-      pickVoices();
-      tries++;
-      if ((speechSynthesis.getVoices()||[]).length || tries>20){
-        clearInterval(t);
-        resolve();
-      }
-    }, 100);
-  });
-}
-
-function speak(text, lang, voiceObj){
-  return new Promise(resolve=>{
-    try{
-      speechSynthesis.cancel();
-      const u=new SpeechSynthesisUtterance(text);
-      if (voiceObj){ u.voice = voiceObj; u.lang = voiceObj.lang; }
-      else { u.lang = lang; }
-      u.rate=1.0;
-      u.onend=resolve;
-      u.onerror=resolve;
-      speechSynthesis.speak(u);
-    } catch { resolve(); }
-  });
-}
-
-// Echo guard
-let lastSpoken="", lastSpokenAt=0;
-function markSpoken(text){ lastSpoken=(text||"").trim(); lastSpokenAt=Date.now(); }
-
-// =========================
-// Parsing (STRICT EN:/KO: pairs)
-// =========================
-function parseTaggedIsland(text){
-  const lines=(text||"").split("\n").map(l=>l.trim()).filter(l=>l.length>0);
-
-  const pairs=[];
-  let currentEN=null;
-
-  for(const line of lines){
-    const up=line.toUpperCase();
-    if (up.startsWith("EN:")){
-      currentEN = line.slice(3).trim();
-      continue;
-    }
-    if (up.startsWith("KO:") || up.startsWith("KR:")){
-      const ko = line.slice(3).trim();
-      if (!currentEN) throw new Error("Found KO: without a preceding EN: line.");
-      pairs.push({ en: currentEN, kr: ko });
-      currentEN=null;
-      continue;
-    }
-  }
-
-  if (currentEN) throw new Error("Last EN: line has no matching KO: line.");
-  if (!pairs.length) throw new Error("No EN:/KO: pairs found.");
-
-  return pairs.map((p,i)=>({ ...p, id:String(i) }));
-}
-
-// =========================
-// Save / Load (localStorage)
-// =========================
+// ===== STORAGE =====
 function storageKey(name){ return "kr_island_" + name.toLowerCase().trim(); }
 const LAST_KEY = "kr_island_last_name";
 
+function getAllSavedIslandNames(){
+  const names=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k && k.startsWith("kr_island_") && k!==LAST_KEY){
+      names.push(k.replace("kr_island_",""));
+    }
+  }
+  return names.sort();
+}
+
+function renderSavedIslands(){
+  const wrap=document.getElementById("savedIslandsList");
+  const names=getAllSavedIslandNames();
+  wrap.innerHTML="";
+
+  if(!names.length){
+    wrap.innerHTML="<div class='muted'>No saved islands yet</div>";
+    return;
+  }
+
+  names.forEach(name=>{
+    const btn=document.createElement("button");
+    btn.className="secondary";
+    btn.textContent=name;
+
+    btn.onclick=()=>{
+      document.getElementById("islandName").value=name;
+      document.getElementById("islandInput").value=
+        localStorage.getItem(storageKey(name))||"";
+    };
+
+    wrap.appendChild(btn);
+  });
+}
+
 function saveIsland(){
-  const name = (document.getElementById("islandName").value || "").trim();
-  if (!name) { alert("Please enter an island name to save."); return; }
-  const text = document.getElementById("islandInput").value || "";
-  localStorage.setItem(storageKey(name), text);
-  localStorage.setItem(LAST_KEY, name);
-  alert(`Saved: ${name}`);
+  const name=document.getElementById("islandName").value.trim();
+  if(!name)return alert("Enter name");
+
+  localStorage.setItem(storageKey(name),
+    document.getElementById("islandInput").value);
+
+  localStorage.setItem(LAST_KEY,name);
+  renderSavedIslands();
 }
 
 function loadIsland(){
-  let name = (document.getElementById("islandName").value || "").trim();
-  if (!name) name = (localStorage.getItem(LAST_KEY) || "").trim();
-  if (!name) { alert("Enter an island name to load."); return; }
+  const name=document.getElementById("islandName").value.trim();
+  const data=localStorage.getItem(storageKey(name));
+  if(!data)return alert("Not found");
 
-  const text = localStorage.getItem(storageKey(name));
-  if (!text) { alert(`No saved island found for: ${name}`); return; }
-
-  document.getElementById("islandName").value = name;
-  document.getElementById("islandInput").value = text;
-  localStorage.setItem(LAST_KEY, name);
-  alert(`Loaded: ${name}`);
+  document.getElementById("islandInput").value=data;
 }
 
 function deleteIsland(){
-  const name = (document.getElementById("islandName").value || "").trim();
-  if (!name) { alert("Enter an island name to delete."); return; }
+  const name=document.getElementById("islandName").value.trim();
   localStorage.removeItem(storageKey(name));
-  alert(`Deleted: ${name}`);
+  renderSavedIslands();
 }
 
-// =========================
-// Session State
-// =========================
-let items=[], firstQueue=[];
-let missedEver=new Set();     // missed at least once (drives retest)
-let forgivenSet=new Set();    // skipped/forgiven; never retested; never counted wrong
-let phase="idle";             // "first" | "retest" | "between" | "complete"
-let retestRound=0;            // 1,2,3...
-let current=null;
-let firstIndex=0;
-let retestQueue=[];
-let retestIndex=0;
-let nextRoundSet=new Set();   // items missed during current retest round
+// ===== BUTTONS =====
+document.getElementById("saveBtn").onclick=saveIsland;
+document.getElementById("loadBtn").onclick=loadIsland;
+document.getElementById("deleteBtn").onclick=deleteIsland;
 
-let rec=null, speechUnlocked=false;
-let busy=false;
-let pendingMicTimer=null;
+// INIT
+renderSavedIslands();
 
-const els={
-  promptEN:document.getElementById("promptEN"),
-  micState:document.getElementById("micState"),
-  answerInput:document.getElementById("answerInput"),
-  statusLine:document.getElementById("statusLine"),
-  details:document.getElementById("details"),
-  stopBtn:document.getElementById("stopBtn"),
-  endBtn:document.getElementById("endBtn"),
-  phasePill:document.getElementById("phasePill"),
-  countPill:document.getElementById("countPill"),
-  wrongPill:document.getElementById("wrongPill"),
-  repeatPromptBtn:document.getElementById("repeatPromptBtn"),
-  skipCountsWrongBtn:document.getElementById("skipCountsWrongBtn"),
-  skipForgiveBtn:document.getElementById("skipForgiveBtn"),
-  continueBtn:document.getElementById("continueBtn"),
-};
-
-function setStatus(text, okNull){
-  els.statusLine.textContent=text;
-  els.statusLine.className="status"+(okNull===true?" ok":okNull===false?" bad":"");
-}
-
-function wrongCount(){
-  // count missedEver excluding forgiven
-  let c=0;
-  for(const id of missedEver){ if(!forgivenSet.has(id)) c++; }
-  return c;
-}
-
-function updatePills(){
-  els.phasePill.textContent =
-    phase==="first" ? "Phase: first pass" :
-    phase==="retest" ? `Phase: retest ${retestRound}` :
-    phase==="between" ? "Phase: between" :
-    phase==="complete" ? "Phase: complete" :
-    "Phase: idle";
-
-  const doneFirst = Math.min(firstIndex, items.length);
-  els.countPill.textContent = `${doneFirst}/${items.length}`;
-  els.wrongPill.textContent = "Wrongs: " + wrongCount();
-}
-
-function clearPendingMic(){
-  if (pendingMicTimer) { clearTimeout(pendingMicTimer); pendingMicTimer=null; }
-}
-function stopRec(){
-  clearPendingMic();
-  try{ rec && rec.stop(); }catch{}
-  rec=null;
-  els.micState.textContent="";
-  els.stopBtn.style.display="none";
-}
-function startRecDelayed(ms){
-  clearPendingMic();
-  pendingMicTimer = setTimeout(()=>startRec(), ms);
-}
-
-function startRec(){
-  if (!speechUnlocked) return;
-  if (!document.getElementById("autoMic").checked) return;
-  if (busy) return;
-  if (phase!=="first" && phase!=="retest") return;
-
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR) return;
-
-  stopRec();
-
-  rec=new SR();
-  rec.lang="ko-KR";
-  rec.interimResults=false;
-  rec.maxAlternatives=1;
-
-  els.micState.textContent="Listening…";
-  els.stopBtn.style.display="inline-block";
-
-  rec.onresult=(e)=>{
-    if (busy) return;
-    const raw=(e.results?.[0]?.[0]?.transcript||"").trim();
-
-    const tooSoon=(Date.now()-lastSpokenAt)<2200;
-    if(tooSoon && canonicalKorean(raw)===canonicalKorean(lastSpoken)){
-      startRecDelayed(200);
-      return;
-    }
-
-    const kr = koreanOnly(raw);
-    if(!kr){
-      startRecDelayed(200);
-      return;
-    }
-
-    els.answerInput.value = kr;
-    handleSubmit();
-  };
-
-  rec.onerror=()=>{
-    stopRec();
-    if((phase==="first"||phase==="retest") && !busy){
-      startRecDelayed(300);
-    }
-  };
-
-  rec.onend=()=>{
-    if((phase==="first"||phase==="retest") && !busy){
-      startRecDelayed(300);
-    }
-  };
-
-  try{ rec.start(); }catch{ stopRec(); }
-}
-
-// =========================
-// Prompt + progression
-// =========================
-async function speakEnglishPrompt(){
-  if(!current) return;
-  if(!document.getElementById("speakEnglish").checked) return;
-  markSpoken(current.en);
-  await speak(current.en, "en-US", EN_VOICE);
-}
-
-async function presentPrompt(){
-  els.continueBtn.style.display="none";
-  els.promptEN.textContent=current.en;
-  els.details.innerHTML="";
-  els.answerInput.value="";
-  setStatus("", null);
-  updatePills();
-
-  stopRec();
-  busy=true;
-
-  await speakEnglishPrompt();
-
-  busy=false;
-  startRecDelayed(550);
-}
-
-function buildRetestQueueFromMissedEver(){
-  const arr=[];
-  for(const id of missedEver){
-    if(!forgivenSet.has(id)) arr.push(id);
-  }
-  return shuffle(arr);
-}
-
-function nextItem(){
-  if(phase==="first"){
-    if(firstIndex >= firstQueue.length) return null;
-    const id = firstQueue[firstIndex++];
-    return items.find(x=>x.id===id) || null;
-  }
-
-  if(phase==="retest"){
-    if(retestIndex >= retestQueue.length) return null;
-    const id = retestQueue[retestIndex++];
-    return items.find(x=>x.id===id) || null;
-  }
-
-  return null;
-}
-
-function goBetween(message, nextPhase){
-  phase="between";
-  stopRec();
-  els.promptEN.textContent = message;
-  els.details.innerHTML = "";
-  setStatus("", null);
-  els.continueBtn.style.display="inline-block";
-  els.continueBtn.dataset.nextPhase = nextPhase;
-  updatePills();
-}
-
-async function advance(){
-  stopRec();
-
-  // Phase transitions when list is exhausted
-  if(phase==="first"){
-    const nxt = nextItem();
-    if(!nxt){
-      // Finished first pass
-      const rq = buildRetestQueueFromMissedEver();
-      if(rq.length>0){
-        // wait for user to continue into retest
-        retestQueue = rq;
-        retestIndex = 0;
-        retestRound = 1;
-        nextRoundSet = new Set();
-        goBetween(`First pass complete. Retest ${rq.length} items.`, "retest");
-        return;
-      }
-      phase="complete";
-      els.promptEN.textContent="Session complete.";
-      updatePills();
-      return;
-    }
-    current = nxt;
-    await presentPrompt();
-    return;
-  }
-
-  if(phase==="retest"){
-    const nxt = nextItem();
-    if(!nxt){
-      // Finished a retest round
-      if(nextRoundSet.size > 0){
-        // prepare another retest round from items missed in this retest
-        retestQueue = shuffle([...nextRoundSet].filter(id => !forgivenSet.has(id)));
-        retestIndex = 0;
-        nextRoundSet = new Set();
-        retestRound += 1;
-        goBetween(`Retest round complete. Next round: ${retestQueue.length} items.`, "retest");
-        return;
-      }
-      phase="complete";
-      els.promptEN.textContent="Session complete.";
-      updatePills();
-      return;
-    }
-    current = nxt;
-    await presentPrompt();
-    return;
-  }
-}
-
-// =========================
-// Buttons: skip / forgive / repeat / continue
-// =========================
-async function skipCountsWrong(){
-  if(busy) return;
-  if(phase!=="first" && phase!=="retest") return;
-  if(!current) return;
-
-  busy=true;
-  stopRec();
-
-  // This skip should count as missed and appear in retest
-  missedEver.add(current.id);
-
-  setStatus("✓", true);
-  busy=false;
-  await advance();
-}
-
-async function skipForgive(){
-  if(busy) return;
-  if(phase!=="first" && phase!=="retest") return;
-  if(!current) return;
-
-  busy=true;
-  stopRec();
-
-  // Forgive: do NOT count wrong and do NOT retest
-  forgivenSet.add(current.id);
-  // Also ensure it doesn't linger as "missed"
-  missedEver.delete(current.id);
-
-  setStatus("✓", true);
-  busy=false;
-  await advance();
-}
-
-async function repeatPrompt(){
-  if(busy) return;
-  if(!current) return;
-  stopRec();
-  busy=true;
-  await speakEnglishPrompt();
-  busy=false;
-  startRecDelayed(450);
-}
-
-async function continuePhases(){
-  const next = els.continueBtn.dataset.nextPhase;
-  els.continueBtn.style.display="none";
-
-  if(next==="retest"){
-    phase="retest";
-    updatePills();
-    await advance();
-    return;
-  }
-}
-
-// =========================
-// Submit logic
-// =========================
-async function handleSubmit(){
-  if (busy) return;
-  if(phase!=="first" && phase!=="retest") return;
-  if(!current) return;
-
-  busy=true;
-  stopRec();
-
-  const attempt = koreanOnly((els.answerInput.value||"").trim());
-  const target  = (current.kr||"").trim();
-
-  if(isCorrect(attempt, target)){
-    setStatus("✓", true);
-    busy=false;
-    await advance();
-    return;
-  }
-
-  // Wrong: always counts as missed (unless user later uses Forgive skip on that card)
-  missedEver.add(current.id);
-
-  // If we’re in a retest round, and you miss it again, it should appear in NEXT retest round.
-  if(phase==="retest"){
-    nextRoundSet.add(current.id);
-  }
-
-  setStatus("INCORRECT", false);
-  els.details.innerHTML = `
-    <div class="muted"><b>Your attempt (KR only):</b> ${escapeHtml(attempt)}</div>
-    <div style="margin-top:6px;"><b>Correct Korean:</b> <span style="font-size:20px;">${escapeHtml(current.kr)}</span></div>
-    <div style="margin-top:10px;" class="muted"><b>Repeat the correct Korean now.</b></div>
-  `;
-
-  // Speak Korean only after incorrect
-  markSpoken(current.kr);
-  await speak(current.kr, "ko-KR", KO_VOICE);
-
-  els.answerInput.value="";
-  busy=false;
-
-  updatePills();
-  startRecDelayed(550);
-}
-
-// =========================
-// Wire up UI
-// =========================
-document.getElementById("saveBtn").addEventListener("click", saveIsland);
-document.getElementById("loadBtn").addEventListener("click", loadIsland);
-document.getElementById("deleteBtn").addEventListener("click", deleteIsland);
-
-els.skipCountsWrongBtn.addEventListener("click", skipCountsWrong);
-els.skipForgiveBtn.addEventListener("click", skipForgive);
-els.repeatPromptBtn.addEventListener("click", repeatPrompt);
-els.continueBtn.addEventListener("click", continuePhases);
-
-document.getElementById("startBtn").addEventListener("click", async ()=>{
-  speechUnlocked = true;
-  await waitForVoices();
-
-  const name = (document.getElementById("islandName").value || "").trim();
-  if (name) localStorage.setItem(LAST_KEY, name);
-
-  const text = document.getElementById("islandInput").value || "";
-  items = parseTaggedIsland(text);
-
-  firstQueue = document.getElementById("autoShuffle").checked
-    ? shuffle(items.map(x=>x.id))
-    : items.map(x=>x.id);
-
-  missedEver = new Set();
-  forgivenSet = new Set();
-  retestQueue = [];
-  nextRoundSet = new Set();
-  phase = "first";
-  retestRound = 0;
-  firstIndex = 0;
-  retestIndex = 0;
-  current = null;
-
-  document.getElementById("session").style.display="block";
-  els.endBtn.style.display="inline-block";
-
-  updatePills();
-  await advance();
-});
-
-els.stopBtn.addEventListener("click", ()=>stopRec());
-
-els.endBtn.addEventListener("click", ()=>{
-  busy=false;
-  stopRec();
-  phase="idle";
-  current=null;
-  items=[]; firstQueue=[];
-  missedEver=new Set(); forgivenSet=new Set();
-  retestQueue=[]; nextRoundSet=new Set();
-  retestRound=0;
-  firstIndex=0; retestIndex=0;
-  els.promptEN.textContent="";
-  els.details.innerHTML="";
-  els.answerInput.value="";
-  setStatus("", null);
-  els.continueBtn.style.display="none";
-  document.getElementById("session").style.display="none";
-  els.endBtn.style.display="none";
-  updatePills();
-});
-
-// Init voices + last name
-waitForVoices();
-const last = localStorage.getItem(LAST_KEY);
-if (last) document.getElementById("islandName").value = last;
 </script>
 </body>
 </html>
