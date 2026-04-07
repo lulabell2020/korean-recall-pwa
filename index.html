@@ -4,171 +4,193 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Korean Voice Recall Trainer</title>
-<link rel="manifest" href="manifest.json"/>
-<meta name="theme-color" content="#111111"/>
+
 <style>
-  body{margin:0;background:#0b0b0b;color:#f2f2f2;font-family:system-ui;}
-  .wrap{max-width:940px;margin:auto;padding:16px;}
-  .card{background:#141414;border:1px solid #2a2a2a;border-radius:16px;padding:14px;margin:12px 0;}
-  textarea,input,select{width:100%;background:#0f0f0f;color:#fff;border:1px solid #333;border-radius:12px;padding:10px;font-size:16px;}
-  button{margin-top:8px;padding:10px 12px;border-radius:12px;border:0;font-weight:700;}
-  .primary{background:#f2f2f2;color:#000;}
-  .secondary{background:#222;color:#fff;border:1px solid #333;}
-  .danger{background:#ff5c5c;color:#000;}
-  .ghost{background:#0f0f0f;color:#fff;border:1px dashed #444;}
-  .okbtn{background:#2a2a2a;color:#fff;border:1px solid #444;}
-  .big{font-size:22px;line-height:1.35;}
-  .status{font-weight:900;margin-top:10px;}
-  .ok{color:#9bff9b;}
-  .bad{color:#ff8f8f;}
-  .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#111;border:1px solid #333;font-size:12px;margin-right:6px;}
-  .muted{opacity:.8;}
-  label{display:block;margin:6px 0;}
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
-  .row > div{flex:1;min-width:220px;}
-  .btnrow{display:flex;gap:10px;flex-wrap:wrap;}
+body{margin:0;background:#0b0b0b;color:#f2f2f2;font-family:system-ui;}
+.wrap{max-width:940px;margin:auto;padding:16px;}
+.card{background:#141414;border:1px solid #2a2a2a;border-radius:16px;padding:14px;margin:12px 0;}
+textarea,input,select{width:100%;background:#0f0f0f;color:#fff;border:1px solid #333;border-radius:12px;padding:10px;font-size:16px;}
+button{margin-top:8px;padding:10px 12px;border-radius:12px;border:0;font-weight:700;}
+.primary{background:#f2f2f2;color:#000;}
+.secondary{background:#222;color:#fff;border:1px solid #333;}
+.big{font-size:22px;}
+.status{font-weight:900;margin-top:10px;}
+.ok{color:#9bff9b;}
+.bad{color:#ff8f8f;}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap;}
 </style>
 </head>
+
 <body>
 <div class="wrap">
-  <h2 style="margin:6px 0 12px;">Korean Voice Recall Trainer</h2>
+<h2>Korean Voice Recall Trainer</h2>
 
-  <div class="card">
-    <div class="muted" style="margin-bottom:8px;">
-      Paste tagged pairs (one per line):
-<pre style="white-space:pre-wrap;background:#0f0f0f;border:1px solid #333;padding:10px;border-radius:12px;margin:8px 0;">EN: I like to go for walks.
-KO: 저는 산책하는 것을 좋아해요.</pre>
-    </div>
+<div class="card">
+<input id="islandName" placeholder="Island name"/>
+<textarea id="islandInput" placeholder="EN: Hello\nKO: 안녕하세요"></textarea>
 
-    <div class="row">
-      <div>
-        <div class="muted" style="font-size:12px;margin-bottom:6px;">Island name</div>
-        <input id="islandName" placeholder="e.g., Prompt Style 1" />
-      </div>
-      <div style="flex:0.9;min-width:240px;">
-        <div class="btnrow">
-          <button class="secondary" id="saveBtn" style="flex:1;">Save</button>
-          <button class="secondary" id="loadBtn" style="flex:1;">Load</button>
-          <button class="secondary" id="deleteBtn" style="flex:1;">Delete</button>
-        </div>
-      </div>
-    </div>
+<div class="btnrow">
+<button id="saveBtn" class="secondary">Save</button>
+<button id="loadBtn" class="secondary">Load</button>
+<button id="deleteBtn" class="secondary">Delete</button>
+</div>
 
-    <textarea id="islandInput" placeholder="EN: Hello
-KO: 안녕하세요"></textarea>
+<div class="card">
+<div id="savedIslandsList"></div>
+</div>
 
-    <!-- NEW SAVED ISLANDS BOX -->
-    <div class="card" style="margin-top:12px;padding:10px;">
-      <div class="muted" style="font-size:12px;margin-bottom:8px;">Saved islands</div>
-      <div id="savedIslandsList" class="btnrow"></div>
-    </div>
+<div class="btnrow">
+<button id="startBtn" class="primary">Start</button>
+<button id="stopBtn" style="display:none">Stop</button>
+<button id="endBtn" style="display:none">End</button>
+</div>
+</div>
 
-    <div class="row">
-      <div>
-        <label><input type="checkbox" id="autoShuffle" checked> Auto Shuffle</label>
-      </div>
-      <div>
-        <label><input type="checkbox" id="speakEnglish" checked> Speak EN</label>
-        <label><input type="checkbox" id="autoMic" checked> Auto mic</label>
-      </div>
-      <div>
-        <select id="leniencyLevel">
-          <option value="strict">Strict</option>
-          <option value="normal" selected>Normal</option>
-          <option value="very">Very lenient</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="btnrow">
-      <button class="primary" id="startBtn" style="flex:1;">Start</button>
-      <button class="secondary" id="stopBtn" style="display:none;flex:1;">Stop</button>
-      <button class="danger" id="endBtn" style="display:none;flex:1;">End</button>
-    </div>
-  </div>
-
-  <div class="card" id="session" style="display:none;">
-    <div class="big" id="promptEN"></div>
-    <input id="answerInput"/>
-    <div class="status" id="statusLine"></div>
-  </div>
+<div id="session" class="card" style="display:none">
+<div id="promptEN" class="big"></div>
+<input id="answerInput"/>
+<div id="statusLine" class="status"></div>
 </div>
 
 <script>
-
 // ===== STORAGE =====
 function storageKey(name){ return "kr_island_" + name.toLowerCase().trim(); }
-const LAST_KEY = "kr_island_last_name";
 
-function getAllSavedIslandNames(){
-  const names=[];
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i);
-    if(k && k.startsWith("kr_island_") && k!==LAST_KEY){
-      names.push(k.replace("kr_island_",""));
+function renderSaved(){
+  const wrap = document.getElementById("savedIslandsList");
+  wrap.innerHTML = "";
+
+  Object.keys(localStorage).forEach(k=>{
+    if(k.startsWith("kr_island_")){
+      const name = k.replace("kr_island_","");
+      const btn = document.createElement("button");
+      btn.className="secondary";
+      btn.textContent=name;
+
+      btn.onclick=()=>{
+        document.getElementById("islandName").value=name;
+        document.getElementById("islandInput").value=localStorage.getItem(k);
+      };
+
+      wrap.appendChild(btn);
     }
-  }
-  return names.sort();
-}
-
-function renderSavedIslands(){
-  const wrap=document.getElementById("savedIslandsList");
-  const names=getAllSavedIslandNames();
-  wrap.innerHTML="";
-
-  if(!names.length){
-    wrap.innerHTML="<div class='muted'>No saved islands yet</div>";
-    return;
-  }
-
-  names.forEach(name=>{
-    const btn=document.createElement("button");
-    btn.className="secondary";
-    btn.textContent=name;
-
-    btn.onclick=()=>{
-      document.getElementById("islandName").value=name;
-      document.getElementById("islandInput").value=
-        localStorage.getItem(storageKey(name))||"";
-    };
-
-    wrap.appendChild(btn);
   });
 }
 
-function saveIsland(){
+document.getElementById("saveBtn").onclick=()=>{
   const name=document.getElementById("islandName").value.trim();
-  if(!name)return alert("Enter name");
+  if(!name) return alert("Enter name");
+  localStorage.setItem(storageKey(name),document.getElementById("islandInput").value);
+  renderSaved();
+};
 
-  localStorage.setItem(storageKey(name),
-    document.getElementById("islandInput").value);
-
-  localStorage.setItem(LAST_KEY,name);
-  renderSavedIslands();
-}
-
-function loadIsland(){
+document.getElementById("loadBtn").onclick=()=>{
   const name=document.getElementById("islandName").value.trim();
-  const data=localStorage.getItem(storageKey(name));
-  if(!data)return alert("Not found");
+  document.getElementById("islandInput").value=localStorage.getItem(storageKey(name))||"";
+};
 
-  document.getElementById("islandInput").value=data;
-}
-
-function deleteIsland(){
+document.getElementById("deleteBtn").onclick=()=>{
   const name=document.getElementById("islandName").value.trim();
   localStorage.removeItem(storageKey(name));
-  renderSavedIslands();
+  renderSaved();
+};
+
+// ===== TRAINER =====
+let pairs=[];
+let index=0;
+let running=false;
+let wrongQueue=[];
+
+function parse(text){
+  const lines=text.split("\n");
+  const out=[];
+  for(let i=0;i<lines.length;i++){
+    if(lines[i].startsWith("EN:")){
+      const en=lines[i].replace("EN:","").trim();
+      const ko=lines[i+1]?.replace("KO:","").trim();
+      if(ko) out.push({en,ko});
+      i++;
+    }
+  }
+  return out;
 }
 
-// ===== BUTTONS =====
-document.getElementById("saveBtn").onclick=saveIsland;
-document.getElementById("loadBtn").onclick=loadIsland;
-document.getElementById("deleteBtn").onclick=deleteIsland;
+function speakEN(text){
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang="en-US";
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+}
+
+function next(){
+  if(wrongQueue.length){
+    current = wrongQueue.shift();
+  } else {
+    if(index>=pairs.length){
+      document.getElementById("statusLine").textContent="Done!";
+      return;
+    }
+    current = pairs[index++];
+  }
+
+  document.getElementById("promptEN").textContent=current.en;
+  document.getElementById("answerInput").value="";
+  document.getElementById("statusLine").textContent="";
+  speakEN(current.en);
+}
+
+function start(){
+  pairs=parse(document.getElementById("islandInput").value);
+  if(!pairs.length) return alert("No pairs");
+
+  index=0;
+  wrongQueue=[];
+  running=true;
+
+  document.getElementById("session").style.display="block";
+  document.getElementById("startBtn").style.display="none";
+  document.getElementById("stopBtn").style.display="inline";
+  document.getElementById("endBtn").style.display="inline";
+
+  next();
+}
+
+function stop(){
+  running=false;
+}
+
+function end(){
+  running=false;
+  document.getElementById("session").style.display="none";
+  document.getElementById("startBtn").style.display="inline";
+  document.getElementById("stopBtn").style.display="none";
+  document.getElementById("endBtn").style.display="none";
+}
+
+function check(){
+  if(!running) return;
+
+  const input=document.getElementById("answerInput").value.trim();
+  if(input===current.ko){
+    document.getElementById("statusLine").innerHTML="<span class='ok'>✓</span>";
+    setTimeout(next,400);
+  } else {
+    document.getElementById("statusLine").innerHTML="<span class='bad'>✗</span>";
+    wrongQueue.push(current);
+  }
+}
+
+// ===== EVENTS =====
+document.getElementById("startBtn").onclick=start;
+document.getElementById("stopBtn").onclick=stop;
+document.getElementById("endBtn").onclick=end;
+
+document.getElementById("answerInput").addEventListener("keydown",e=>{
+  if(e.key==="Enter") check();
+});
 
 // INIT
-renderSavedIslands();
-
+renderSaved();
 </script>
 </body>
 </html>
