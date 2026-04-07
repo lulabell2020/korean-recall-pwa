@@ -9,7 +9,7 @@
 body{margin:0;background:#0b0b0b;color:#f2f2f2;font-family:system-ui;}
 .wrap{max-width:940px;margin:auto;padding:16px;}
 .card{background:#141414;border:1px solid #2a2a2a;border-radius:16px;padding:14px;margin:12px 0;}
-textarea,input,select{width:100%;background:#0f0f0f;color:#fff;border:1px solid #333;border-radius:12px;padding:10px;font-size:16px;}
+textarea,input{width:100%;background:#0f0f0f;color:#fff;border:1px solid #333;border-radius:12px;padding:10px;font-size:16px;}
 button{margin-top:8px;padding:10px 12px;border-radius:12px;border:0;font-weight:700;}
 .primary{background:#f2f2f2;color:#000;}
 .secondary{background:#222;color:#fff;border:1px solid #333;}
@@ -49,6 +49,12 @@ button{margin-top:8px;padding:10px 12px;border-radius:12px;border:0;font-weight:
 <div id="session" class="card" style="display:none">
 <div id="promptEN" class="big"></div>
 <input id="answerInput"/>
+
+<div class="btnrow">
+<button id="skipWrongBtn" class="secondary">Skip (Wrong)</button>
+<button id="skipAcceptBtn" class="secondary">Skip (Accept)</button>
+</div>
+
 <div id="statusLine" class="status"></div>
 </div>
 
@@ -97,17 +103,20 @@ document.getElementById("deleteBtn").onclick=()=>{
 
 // ===== TRAINER =====
 let pairs=[];
-let index=0;
+let queue=[];
+let wrong=[];
+let current=null;
 let running=false;
-let wrongQueue=[];
+let correctCount=0;
+let wrongCount=0;
 
 function parse(text){
-  const lines=text.split("\n");
+  const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   const out=[];
   for(let i=0;i<lines.length;i++){
     if(lines[i].startsWith("EN:")){
-      const en=lines[i].replace("EN:","").trim();
-      const ko=lines[i+1]?.replace("KO:","").trim();
+      const en=lines[i].replace(/^EN:\s*/,"");
+      const ko=(lines[i+1]||"").replace(/^KO:\s*/,"");
       if(ko) out.push({en,ko});
       i++;
     }
@@ -122,29 +131,43 @@ function speakEN(text){
   speechSynthesis.speak(u);
 }
 
+function updateStatus(extra=""){
+  document.getElementById("statusLine").innerHTML =
+    `${extra} ✔ ${correctCount} | ✗ ${wrongCount} | Remaining: ${queue.length + wrong.length}`;
+}
+
 function next(){
-  if(wrongQueue.length){
-    current = wrongQueue.shift();
-  } else {
-    if(index>=pairs.length){
-      document.getElementById("statusLine").textContent="Done!";
+  if(!running) return;
+
+  if(!queue.length){
+    if(wrong.length){
+      queue=[...wrong];
+      wrong=[];
+    } else {
+      updateStatus("Done!");
       return;
     }
-    current = pairs[index++];
   }
+
+  current = queue.shift();
 
   document.getElementById("promptEN").textContent=current.en;
   document.getElementById("answerInput").value="";
-  document.getElementById("statusLine").textContent="";
+  updateStatus();
+
   speakEN(current.en);
+
+  startMic();
 }
 
 function start(){
   pairs=parse(document.getElementById("islandInput").value);
   if(!pairs.length) return alert("No pairs");
 
-  index=0;
-  wrongQueue=[];
+  queue=[...pairs];
+  wrong=[];
+  correctCount=0;
+  wrongCount=0;
   running=true;
 
   document.getElementById("session").style.display="block";
@@ -157,28 +180,68 @@ function start(){
 
 function stop(){
   running=false;
+  recognition?.stop();
 }
 
 function end(){
   running=false;
+  recognition?.stop();
+
   document.getElementById("session").style.display="none";
   document.getElementById("startBtn").style.display="inline";
   document.getElementById("stopBtn").style.display="none";
   document.getElementById("endBtn").style.display="none";
 }
 
-function check(){
+// ===== MIC =====
+let recognition;
+
+function startMic(){
+  if(!('webkitSpeechRecognition' in window)) return;
+
+  recognition = new webkitSpeechRecognition();
+  recognition.lang = "ko-KR";
+  recognition.interimResults = false;
+
+  recognition.onresult = (e)=>{
+    const result = e.results[0][0].transcript.trim();
+    check(result);
+  };
+
+  recognition.start();
+}
+
+// ===== CHECK =====
+function check(input){
   if(!running) return;
 
-  const input=document.getElementById("answerInput").value.trim();
-  if(input===current.ko){
-    document.getElementById("statusLine").innerHTML="<span class='ok'>✓</span>";
+  if(input === current.ko){
+    correctCount++;
+    updateStatus("<span class='ok'>✓</span>");
     setTimeout(next,400);
+
   } else {
-    document.getElementById("statusLine").innerHTML="<span class='bad'>✗</span>";
-    wrongQueue.push(current);
+    wrongCount++;
+    wrong.push(current);
+
+    updateStatus(`<span class='bad'>✗</span> ${current.ko}`);
+
+    speakEN(current.en);
+    setTimeout(startMic,800);
   }
 }
+
+// ===== SKIP =====
+document.getElementById("skipWrongBtn").onclick=()=>{
+  wrongCount++;
+  wrong.push(current);
+  next();
+};
+
+document.getElementById("skipAcceptBtn").onclick=()=>{
+  correctCount++;
+  next();
+};
 
 // ===== EVENTS =====
 document.getElementById("startBtn").onclick=start;
@@ -186,7 +249,9 @@ document.getElementById("stopBtn").onclick=stop;
 document.getElementById("endBtn").onclick=end;
 
 document.getElementById("answerInput").addEventListener("keydown",e=>{
-  if(e.key==="Enter") check();
+  if(e.key==="Enter"){
+    check(document.getElementById("answerInput").value.trim());
+  }
 });
 
 // INIT
